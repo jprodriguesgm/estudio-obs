@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estúdio</title>
+<link rel="icon" href="/ui/icone.png">
+<link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+<div class="janela" id="janela">
+  <div class="topo">
+    <div class="luzes"><i></i><i></i><i></i></div>
+    <div class="titulo">Estúdio <small id="versao"></small> <small id="maquina"></small></div>
+    <button class="btn pequeno so-cheia" id="abrir-mini" title="Abre uma janela pequena para deixar ao lado do OBS">Abrir janelinha</button>
+    <button class="icone so-cheia" id="abrir-config" title="Configurações">⚙</button>
+  </div>
+
+  <div class="faixa-aviso hidden" id="faltando"></div>
+  <div class="faixa-aviso hidden" id="erro-geral"></div>
+
+  <!-- Gravando agora (é também a janelinha) -->
+  <div class="caixa agora" id="agora">
+    <div class="rotulo">Gravando agora <span class="dica-inline" id="relogio"></span></div>
+    <div id="agora-status"></div>
+    <div class="linha troca">
+      <select class="campo" id="troca-select"></select>
+      <button class="btn" id="troca-btn">Trocar professor</button>
+      <button class="btn hidden" id="troca-voltar">Voltar para a agenda</button>
+    </div>
+    <div class="dica" id="troca-dica">Use quando o professor estiver no horário de outro, ou quando houver dois professores no mesmo horário. Vale para a gravação atual e as próximas, até a agenda mudar de horário.</div>
+  </div>
+
+  <div class="caixa so-cheia">
+    <div class="rotulo">Agenda do dia <span class="dica-inline" id="agenda-arquivo"></span></div>
+    <div id="agenda"></div>
+  </div>
+
+  <div class="caixa so-cheia">
+    <div class="rotulo">Gravações — conferência antes de subir</div>
+    <div class="dica" style="margin-bottom:8px">Confira professor, horário e duração. Se algo foi para o lugar errado, use "Mover para". Quando estiver certo, clique em <b>Conferido, pode subir</b>. O app nunca apaga nada: depois do envio, ele confere nome e tamanho no destino e avisa quando pode apagar.</div>
+    <div id="grupos"></div>
+  </div>
+
+  <!-- Configurações -->
+  <div class="caixa so-cheia hidden" id="config">
+    <div class="rotulo">Configurações desta máquina</div>
+    <div class="cfg" data-campo="nome_maquina" data-tipo="texto"><label>Nome desta máquina</label><div class="linha"><input class="campo" placeholder="ex.: Estúdio 1 — São Gabriel"></div></div>
+    <div class="cfg" data-campo="pasta_obs" data-tipo="pasta"><label>Pasta onde o OBS grava</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
+    <div class="cfg" data-campo="pasta_saida" data-tipo="pasta"><label>Pasta de saída (onde nascem as pastas dos professores)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
+    <div class="cfg" data-campo="agenda" data-tipo="arquivo"><label>Arquivo da agenda do dia (.json)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
+    <div class="cfg" data-campo="pasta_envio" data-tipo="pasta"><label>Pasta de envio (Drive para computador; na simulação, drive-falso)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
+    <div class="linha">
+      <div class="cfg" data-campo="estavel_seg" data-tipo="numero"><label>Segundos parado = gravação terminou</label><div class="linha"><input class="campo" type="number" min="1" style="width:90px"></div></div>
+      <div class="cfg" data-campo="antecedencia_min" data-tipo="numero"><label>Minutos antes do horário que já contam</label><div class="linha"><input class="campo" type="number" min="1" style="width:90px"></div></div>
+    </div>
+    <div class="linha"><button class="btn principal" id="salvar-config">Salvar</button><button class="btn" id="fechar-config">Fechar</button></div>
+  </div>
+</div>
+<script src="/ui/app.js"></script>
+</body>
+</html>
