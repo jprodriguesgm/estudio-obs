@@ -95,7 +95,7 @@ def ffprobe(caminho: str | Path) -> float | None:
     if not exe:
         return None
     try:
-        r = subprocess.run([exe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(caminho)],
+        r = subprocess.run([exe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(caminho)], encoding="utf-8", errors="replace",
                            capture_output=True, text=True, timeout=20)
         return float(r.stdout.strip()) or None
     except (OSError, ValueError, subprocess.SubprocessError):

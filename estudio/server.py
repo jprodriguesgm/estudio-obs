@@ -69,10 +69,30 @@ def acao_escolher(corpo) -> dict:
         if tipo == "pasta":
             p = dialogs.choose_folder(titulo, corpo.get("inicio"))
         else:
-            p = dialogs.choose_file(titulo, corpo.get("inicio"), ("json",))
+            p = dialogs.choose_file(titulo, corpo.get("inicio"), ("*",) if corpo.get("exe") else ("json",))
     except dialogs.Unsupported:
-        raise ApiError("Neste computador o app ainda não abre a janela de escolher. Cole o caminho no campo.")
+        p = _escolher_tk(tipo, titulo)
     return {"caminho": p}
+
+
+def _escolher_tk(tipo: str, titulo: str):
+    """Windows: a janela de escolher pasta/arquivo do próprio Python (tkinter)."""
+    try:
+        import tkinter
+        from tkinter import filedialog
+    except ImportError:
+        raise ApiError("Neste computador o app não abre a janela de escolher. Cole o caminho no campo.")
+    raiz = tkinter.Tk()
+    raiz.withdraw()
+    raiz.attributes("-topmost", True)
+    try:
+        if tipo == "pasta":
+            p = filedialog.askdirectory(title=titulo, parent=raiz)
+        else:
+            p = filedialog.askopenfilename(title=titulo, parent=raiz)
+    finally:
+        raiz.destroy()
+    return p or None
 
 
 def acao_trocar(corpo) -> dict:

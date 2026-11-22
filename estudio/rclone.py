@@ -17,8 +17,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+_LOCAL = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
 LUGARES_RCLONE = ("/opt/homebrew/bin/rclone", "/usr/local/bin/rclone", str(Path.home() / "Applications" / "rclone"),
-                  str(Path.home() / "Applications" / "rclone" / "rclone"), str(Path.home() / "bin" / "rclone"))
+                  str(Path.home() / "Applications" / "rclone" / "rclone"), str(Path.home() / "bin" / "rclone"),
+                  # Windows
+                  str(Path(_LOCAL) / "Microsoft" / "WinGet" / "Links" / "rclone.exe"),
+                  str(Path.home() / "rclone" / "rclone.exe"), r"C:\rclone\rclone.exe",
+                  r"C:\Program Files\rclone\rclone.exe")
 LUGARES_TRANSCRIBE = ("/usr/local/bin/transcribe", "/opt/homebrew/bin/transcribe", str(Path.home() / "bin" / "transcribe"))
 PATH_BASE = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 
@@ -122,7 +127,8 @@ def juntar(base: str, *partes: str) -> str:
 
 def _rodar(exe: str, args: list[str], tempo: int) -> str:
     try:
-        r = subprocess.run([exe, *args], capture_output=True, text=True, timeout=tempo, env=ambiente())
+        r = subprocess.run([exe, *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=tempo, env=ambiente())
     except subprocess.TimeoutExpired:
         raise ErroRclone("o rclone demorou demais e foi interrompido")
     except OSError as e:
@@ -149,7 +155,7 @@ def _amigavel(msg: str) -> str:
 def _por_linha(cmd: list[str], ao_ler) -> int:
     """Roda um programa e entrega cada linha da saída (stdout+stderr) para ao_ler, enquanto roda."""
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
-                         env=ambiente(), errors="replace")
+                         env=ambiente(), encoding="utf-8", errors="replace")
     ultimas: list[str] = []
     for ln in p.stdout:                                   # type: ignore[union-attr]
         for parte in ln.replace("\r", "\n").splitlines():

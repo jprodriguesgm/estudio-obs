@@ -297,7 +297,7 @@ function lerConfig() {
     const el = campoDe(c);
     if (c.dataset.tipo === "caixa") mudancas[c.dataset.campo] = el.checked;
     else if (c.dataset.tipo === "numero") mudancas[c.dataset.campo] = Number(el.value);
-    else if (["rclone_destino", "pastas_do_dia_url", "nome_maquina"].includes(c.dataset.campo)) mudancas[c.dataset.campo] = el.value.trim();
+    else if (["rclone_destino", "pastas_do_dia_url", "nome_maquina", "rclone_exe"].includes(c.dataset.campo)) mudancas[c.dataset.campo] = el.value.trim();
     else mudancas[c.dataset.campo] = el.value.trim() || null;
   });
   return mudancas;
@@ -321,7 +321,7 @@ $("#fechar-config").onclick = () => { configAberta = false; $("#config").classLi
 document.querySelectorAll(".cfg .escolher").forEach((b) => b.onclick = async () => {
   const c = b.closest(".cfg");
   try {
-    const r = await api("/api/escolher", {tipo: c.dataset.tipo === "arquivo" ? "arquivo" : "pasta"});
+    const r = await api("/api/escolher", {tipo: c.dataset.tipo.startsWith("arquivo") ? "arquivo" : "pasta", exe: c.dataset.tipo === "arquivo-exe"});
     if (r.caminho) c.querySelector("input").value = r.caminho;
   } catch (x) { erro(x.message); }
 });
