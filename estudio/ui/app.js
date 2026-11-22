@@ -6,6 +6,7 @@ if (MINI) document.body.classList.add("mini");
 let estado = null;
 const assinaturas = {};
 let configAberta = false;
+let fechado = false;
 
 async function api(caminho, corpo) {
   const op = corpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(corpo)};
@@ -245,6 +246,17 @@ async function acao(caminho, corpo, botao) {
 $("#troca-btn").onclick = () => acao("/api/trocar", {pasta: $("#troca-select").value});
 $("#troca-voltar").onclick = () => acao("/api/trocar", {pasta: null});
 $("#abrir-mini").onclick = () => window.open("/?mini=1", "estudio-janelinha", "width=440,height=260");
+$("#fechar-app").onclick = async (ev) => {
+  const b = ev.target;
+  if (!b.dataset.confirmar) {
+    b.dataset.confirmar = "1"; b.textContent = "Clique de novo para fechar";
+    setTimeout(() => { delete b.dataset.confirmar; b.textContent = "Fechar o Estúdio"; }, 4000);
+    return;
+  }
+  try { await api("/api/sair", {}); } catch (x) { /* já fechou */ }
+  fechado = true;
+  $("#janela").classList.add("hidden"); $("#fechado").classList.remove("hidden");
+};
 $("#voltar").onclick = () => acao("/api/voltar", {});
 $("#dia-ant").onclick = (ev) => acao("/api/dia", {passo: -1}, ev.target);
 $("#dia-prox").onclick = (ev) => acao("/api/dia", {passo: 1}, ev.target);
@@ -287,7 +299,7 @@ function preencherConfig() {
   $("#destino-dica").textContent = snd
     ? `Subir no Drive encontrado: conexão "${snd.remoto}", pasta "${snd.raiz || "(raiz)"}"${snd.email ? ", conta " + snd.email : ""}. Cada professor vira uma pasta dentro do destino: <destino>/26_xxx Professor/AAAA MM DD/Footage.`
     : "Não achei o Subir no Drive neste computador. Preencha o destino (conexão do rclone:pasta).";
-  $("#transcribe-dica").textContent = en.transcribe ? "transcribe encontrado: " + en.transcribe : "Não achei o transcribe neste computador: as gravações sobem sem transcrição.";
+  $("#transcribe-dica").textContent = en.transcribe ? "Transcrição: " + en.transcribe : "Sem transcrição neste computador: as gravações sobem sem transcrever.";
   visibilidadeEnvio();
 }
 function visibilidadeEnvio() {
@@ -338,11 +350,12 @@ $("#salvar-config").onclick = async () => {
 // ------------------------------------------------------------------ laço
 
 async function atualizar() {
+  if (fechado) return;
   try {
     estado = await api("/api/estado");
     desenhar();
   } catch (x) {
-    $("#faltando").textContent = "O app está fechado. Abra o Estúdio de novo (dois cliques em Abrir Estudio.command).";
+    $("#faltando").textContent = "O Estúdio está fechado. Abra de novo (dois cliques no app Estúdio).";
     $("#faltando").classList.remove("hidden");
   }
   setTimeout(atualizar, 1000);

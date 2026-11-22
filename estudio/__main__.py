@@ -3,6 +3,7 @@
   python3 -m estudio simular              simulação da Fase 1 (sem OBS): prepara a pasta e grava arquivos falsos
   python3 -m estudio simular --preparar   só prepara a pasta de teste e configura o app
   python3 -m estudio simular --limpar     apaga a pasta de teste e o registro, para recomeçar
+  python3 -m estudio transcrever <pasta>  transcreve como o transcribe (Whisper do app)
 """
 from __future__ import annotations
 
@@ -21,12 +22,17 @@ def main(argv=None):
     si.add_argument("--preparar", action="store_true", help="só prepara a pasta e configura o app")
     si.add_argument("--rapido", action="store_true", help="sem pausas nem perguntas (para os testes automáticos)")
     si.add_argument("--limpar", action="store_true", help="apaga a pasta de teste e o registro")
+    tr = sub.add_parser("transcrever", help="transcreve vídeos ou pastas (como o transcribe)")
+    tr.add_argument("entradas", nargs="+")
     args = ap.parse_args(argv)
 
     if args.cmd in (None, "abrir"):
         from . import server
         server.serve(porta=getattr(args, "porta", None), abrir_navegador=not getattr(args, "sem_navegador", False))
         return 0
+    if args.cmd == "transcrever":
+        from . import transcricao
+        return transcricao.main(args.entradas)
     if args.cmd == "simular":
         from . import simulador
         return simulador.main(args)

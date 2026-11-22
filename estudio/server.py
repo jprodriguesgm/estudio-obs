@@ -37,7 +37,7 @@ def acao_estado(_q=None) -> dict:
     snd = rclone.subir_no_drive()
     envio = {"subir_no_drive": {"remoto": snd["remoto"], "raiz": snd["raiz"], "email": snd["email"]} if snd else None,
              "destino_padrao": rclone.destino_padrao(), "destino": rclone.destino(cfg),
-             "transcribe": rclone.achar_transcribe(cfg)}
+             "transcribe": (rclone.comando_transcricao(cfg) or (None, None))[1]}
     return {"versao": __version__, "config": cfg, "envio": envio, **ESTUDIO.resumo()}
 
 

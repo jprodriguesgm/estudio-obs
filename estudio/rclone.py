@@ -128,7 +128,7 @@ def juntar(base: str, *partes: str) -> str:
 def _rodar(exe: str, args: list[str], tempo: int) -> str:
     try:
         r = subprocess.run([exe, *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=tempo, env=ambiente())
+                           timeout=tempo, env=ambiente(), **({"creationflags": 0x08000000} if os.name == "nt" else {}))
     except subprocess.TimeoutExpired:
         raise ErroRclone("o rclone demorou demais e foi interrompido")
     except OSError as e:
@@ -155,7 +155,8 @@ def _amigavel(msg: str) -> str:
 def _por_linha(cmd: list[str], ao_ler) -> int:
     """Roda um programa e entrega cada linha da saída (stdout+stderr) para ao_ler, enquanto roda."""
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
-                         env=ambiente(), encoding="utf-8", errors="replace")
+                         env=ambiente(), encoding="utf-8", errors="replace",
+                         **({"creationflags": 0x08000000} if os.name == "nt" else {}))
     ultimas: list[str] = []
     for ln in p.stdout:                                   # type: ignore[union-attr]
         for parte in ln.replace("\r", "\n").splitlines():
@@ -199,15 +200,42 @@ def listar(exe: str, pasta_remota: str) -> dict[str, int]:
     return {i["Name"]: int(i.get("Size", -1)) for i in itens}
 
 
-def transcrever(exe: str, pasta: Path, ao_ler) -> None:
-    """Roda o `transcribe` do Mac na pasta Footage (um SRT por vídeo + SRT único do dia + tabela)."""
+def comando_transcricao(cfg: dict) -> tuple[list[str], str] | None:
+    """Como transcrever neste computador: (comando, descrição) ou None.
+
+    1. o `transcribe` escolhido nas Configurações;
+    2. o Whisper que vai dentro do app (app empacotado: mlx no Mac, whisper.cpp no Windows);
+    3. o `transcribe` instalado no Mac (rodando pelo Python, como até a versão 1.0);
+    4. o Whisper do Python, se estiver instalado.
+    """
+    from . import transcricao
+    escolhido = (cfg.get("transcribe_exe") or "").strip()
+    if escolhido and Path(escolhido).is_file():
+        return (["/bin/bash", escolhido] if sys.platform != "win32" else [escolhido]), f"transcribe ({escolhido})"
+    congelado = getattr(sys, "frozen", False)
+    m = transcricao.motor()
+    if congelado and m["ok"]:
+        exe = Path(sys.executable)
+        if os.name == "nt" and (exe.parent / "estudio-terminal.exe").is_file():
+            exe = exe.parent / "estudio-terminal.exe"      # a versão com saída de texto (sem abrir janela)
+        return [str(exe), "transcrever"], f"Whisper do app: {m['nome']}"
+    externo = _achar("transcribe", "", LUGARES_TRANSCRIBE)
+    if externo and sys.platform != "win32":
+        return ["/bin/bash", externo], f"transcribe ({externo})"
+    if m["ok"]:
+        return [sys.executable, "-m", "estudio", "transcrever"], f"Whisper do Python: {m['nome']}"
+    return None
+
+
+def transcrever(cmd: list[str], pasta: Path, ao_ler) -> None:
+    """Transcreve a pasta Footage (um SRT por vídeo + SRT único do dia + tabela)."""
     try:
-        rc = _por_linha(["/bin/bash", exe, str(pasta)] if sys.platform != "win32" else [exe, str(pasta)], ao_ler)
+        rc = _por_linha([*cmd, str(pasta)], ao_ler)
     except OSError as e:
-        raise ErroRclone(f"não consegui rodar o transcribe: {e}")
-    if rc != 0:
+        raise ErroRclone(f"não consegui rodar a transcrição: {e}")
+    if rc not in (0, 2):                                   # 2 = alguns vídeos sem transcrição (o resto sobe)
         ult = getattr(_por_linha, "ultimas", [])
-        raise ErroRclone(f"o transcribe terminou com erro: {ult[-1][:200] if ult else rc}")
+        raise ErroRclone(f"a transcrição terminou com erro: {ult[-1][:200] if ult else rc}")
 
 
 def testar(cfg: dict) -> str:

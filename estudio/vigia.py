@@ -521,13 +521,13 @@ class Estudio:
         try:
             # 1. transcrição
             if cfg.get("transcrever", True):
-                exe_t = rclone.achar_transcribe(cfg)
-                if not exe_t:
-                    andamento["etapa"] = "Sem o transcribe neste computador: subindo sem transcrever."
+                cmd_t = rclone.comando_transcricao(cfg)
+                if not cmd_t:
+                    andamento["etapa"] = "Sem transcrição neste computador: subindo sem transcrever."
                 elif self._precisa_transcrever(footage):
                     andamento.update(estado="transcrevendo", msg="transcrevendo…")
                     marcar("conferido", "transcrevendo…")
-                    rclone.transcrever(exe_t, footage, lambda ln: andamento.update(msg=ln[:160]))
+                    rclone.transcrever(cmd_t[0], footage, lambda ln: andamento.update(msg=ln[:160]))
                 else:
                     andamento["etapa"] = "Já estava transcrito."
             # 2. envio

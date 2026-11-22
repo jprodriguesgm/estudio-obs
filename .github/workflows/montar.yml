@@ -1,0 +1,308 @@
+# Monta o Estúdio para Mac (Apple Silicon) e Windows e publica em "Releases".
+# Roda quando alguém aperta "Run workflow" (aba Actions) ou quando sobe uma etiqueta v1.2.3.
+#   - "Versão oficial" vazia → "Montagem N (teste)", pré-lançamento.
+#   - "Versão oficial" = 1.2.3 (ou etiqueta v1.2.3) → versão oficial, no link releases/latest.
+# O Whisper vai dentro: Mac = mlx-whisper (o mesmo do transcribe); Windows = whisper.cpp.
+# Os modelos ficam no cache entre uma montagem e outra.
+name: Montar o app
+
+on:
+  workflow_dispatch:
+    inputs:
+      sistemas:
+        description: "Montar para"
+        type: choice
+        options: [ambos, mac, windows]
+        default: ambos
+      versao:
+        description: "Versão oficial (ex.: 1.1.0). Deixe vazio para uma versão de teste."
+        type: string
+        default: ""
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: montar
+  cancel-in-progress: false
+
+jobs:
+  plano:
+    runs-on: ubuntu-24.04
+    outputs:
+      matriz: ${{ steps.m.outputs.matriz }}
+    steps:
+      - name: Conferir a versão oficial
+        env:
+          VERSAO: ${{ inputs.versao }}
+          SISTEMAS: ${{ inputs.sistemas }}
+        run: |
+          if [ -n "$VERSAO" ] && ! [[ "$VERSAO" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Versão::Use o formato 1.2.3 (só números e pontos), sem o v."
+            exit 1
+          fi
+          if [ -n "$VERSAO" ] && [ "$SISTEMAS" != "ambos" ]; then
+            echo "::error title=Versão::Versão oficial sai sempre para Mac e Windows juntos (escolha ambos)."
+            exit 1
+          fi
+      - id: m
+        env:
+          SISTEMAS: ${{ inputs.sistemas }}
+        run: |
+          MAC='{"os":"macos-15","nome":"mac"}'; WIN='{"os":"windows-2022","nome":"windows"}'
+          case "${SISTEMAS:-ambos}" in
+            mac) echo "matriz={\"include\":[$MAC]}" >> "$GITHUB_OUTPUT" ;;
+            windows) echo "matriz={\"include\":[$WIN]}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "matriz={\"include\":[$MAC,$WIN]}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  montar:
+    needs: plano
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plano.outputs.matriz) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # ---------------------------------------------------------------- Python e Whisper
+      - name: Python do app (Mac)
+        if: matrix.nome == 'mac'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pytest imageio-ffmpeg
+          # mlx-whisper sem o torch (o torch só serve para converter modelos)
+          python -m pip install mlx numba numpy tqdm more-itertools tiktoken huggingface_hub scipy
+          python -m pip install --no-deps mlx-whisper
+          python -c "import mlx_whisper, mlx.core as mx, imageio_ffmpeg; print('mlx', mx.__version__, '· ffmpeg', imageio_ffmpeg.get_ffmpeg_exe())"
+
+      - name: Python do app (Windows)
+        if: matrix.nome == 'windows'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          # antivírus: o "envelope" pronto do PyInstaller é o mesmo de muitos vírus; montado aqui ele fica diferente
+          PYINSTALLER_COMPILE_BOOTLOADER=1 python -m pip install --no-binary pyinstaller pyinstaller
+          python -m pip install pytest imageio-ffmpeg
+
+      - name: Modelo do Whisper (cache)
+        id: modelo
+        uses: actions/cache/restore@v6
+        with:
+          path: modelos
+          key: modelo-${{ matrix.nome }}-v1
+
+      - name: Baixar o modelo (Mac)
+        if: matrix.nome == 'mac' && steps.modelo.outputs.cache-hit != 'true'
+        run: |
+          python - <<'EOF'
+          from huggingface_hub import snapshot_download
+          snapshot_download("mlx-community/whisper-large-v3-turbo", local_dir="modelos/whisper-large-v3-turbo",
+                            allow_patterns=["config.json", "weights.*"])
+          EOF
+          du -sh modelos/whisper-large-v3-turbo; ls -la modelos/whisper-large-v3-turbo
+
+      - name: Baixar o modelo (Windows)
+        if: matrix.nome == 'windows' && steps.modelo.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p modelos
+          curl -fL --retry 3 -o modelos/ggml-large-v3-turbo-q8_0.bin \
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin"
+          du -sh modelos/*
+
+      - name: Guardar o modelo no cache
+        if: steps.modelo.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: modelos
+          key: modelo-${{ matrix.nome }}-v1
+
+      - name: whisper.cpp (Windows)
+        if: matrix.nome == 'windows'
+        shell: bash
+        run: |
+          gh release view --repo ggml-org/whisper.cpp --json tagName,assets --jq '.tagName, (.assets[].name)' | tee rel.txt
+          ASSET=$(grep -x 'whisper-blas-bin-x64.zip' rel.txt || grep -x 'whisper-bin-x64.zip' rel.txt)
+          [ -n "$ASSET" ] || { echo "::error title=whisper.cpp::não achei o pacote para Windows na última versão"; exit 1; }
+          gh release download --repo ggml-org/whisper.cpp --pattern "$ASSET" --dir wcpp
+          cd wcpp && 7z x -y "$ASSET" > /dev/null && cd ..
+          CLI=$(find wcpp -iname 'whisper-cli.exe' | head -1)
+          [ -n "$CLI" ] || CLI=$(find wcpp -iname 'main.exe' | head -1)
+          [ -n "$CLI" ] || { echo "::error title=whisper.cpp::sem whisper-cli.exe no pacote"; exit 1; }
+          mkdir -p whisper
+          cp "$(dirname "$CLI")"/*.exe "$(dirname "$CLI")"/*.dll whisper/ 2>/dev/null || true
+          ls -la whisper
+          echo "whisper.cpp $(head -1 rel.txt) ($ASSET)" > whisper-versao.txt
+
+      - name: Versão oficial
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.versao != ''
+        shell: bash
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: |
+          VER="${VERSAO:-${GITHUB_REF#refs/tags/v}}"
+          python -c "import re,sys; p='estudio/__init__.py'; s=open(p,encoding='utf-8').read(); open(p,'w',encoding='utf-8').write(re.sub(r'__version__ = \".*\"', '__version__ = \"'+sys.argv[1]+'\"', s, count=1))" "$VER"
+          python -c "import estudio; print('versão', estudio.__version__)"
+
+      - name: Testes (Mac)
+        if: matrix.nome == 'mac'
+        run: |
+          set +e
+          python -m pytest -q -rfE tests > pytest.txt 2>&1
+          rc=$?
+          tail -40 pytest.txt
+          if [ $rc -ne 0 ]; then
+            echo "::error title=Testes::$(grep -E '^(FAILED|ERROR)|Error:|assert |^E  ' pytest.txt | head -40 | tr '\n' '|' | cut -c1-3500)"
+          fi
+          exit $rc
+
+      # ---------------------------------------------------------------- vídeo de teste (fala sintetizada)
+      - name: Vídeo de teste (Mac)
+        if: matrix.nome == 'mac'
+        run: |
+          mkdir -p build
+          FRASE="Olá, sejam bem-vindos à aula de teste do estúdio. Hoje vamos falar de filas e pilhas."
+          say -v Luciana -o build/fala.aiff "$FRASE" 2>/dev/null || say -o build/fala.aiff "$FRASE"
+          FF=$(python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
+          "$FF" -f lavfi -i color=c=gray:s=640x360:r=30 -i build/fala.aiff -shortest -c:v libx264 -c:a aac \
+            "build/2026-01-01 10-00-00.mov" -y -loglevel error
+          ls -la build
+
+      - name: Vídeo de teste (Windows)
+        if: matrix.nome == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          Add-Type -AssemblyName System.Speech
+          $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+          $s.SetOutputToWaveFile("build/fala.wav")
+          $s.Speak("Hello, welcome to the studio test lesson. Today we will talk about queues and stacks.")
+          $s.Dispose()
+          $ff = python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"
+          & $ff -f lavfi -i color=c=gray:s=640x360:r=30 -i build/fala.wav -shortest -c:v libx264 -c:a aac "build/2026-01-01 10-00-00.mov" -y -loglevel error
+          Get-ChildItem build
+
+      # ---------------------------------------------------------------- montar
+      - name: Montar o app (PyInstaller)
+        run: pyinstaller --noconfirm packaging/estudio.spec
+
+      - name: Assinar (Mac, sem conta de desenvolvedor)
+        if: matrix.nome == 'mac'
+        run: codesign --force --deep --sign - "dist/Estudio.app"
+
+      - name: Diagnóstico do app montado (Mac)
+        if: matrix.nome == 'mac'
+        env:
+          ESTUDIO_MLX_CPU: "1"    # a máquina do GitHub não tem Metal; no Mac de verdade usa a GPU
+        run: |
+          echo "### Mac" > diag-mac.txt
+          sw_vers | tr '\n' ' ' >> diag-mac.txt; echo >> diag-mac.txt
+          set +e
+          "dist/Estudio.app/Contents/MacOS/Estudio" diagnostico "build/2026-01-01 10-00-00.mov" > d.txt 2>&1
+          rc=$?
+          cat d.txt | tee -a diag-mac.txt
+          codesign --verify --deep --verbose=1 "dist/Estudio.app" 2>&1 | tee -a diag-mac.txt
+          du -sh "dist/Estudio.app" | tee -a diag-mac.txt
+          echo "::notice title=Diagnóstico Mac::$(tr '\n' '|' < diag-mac.txt)"
+          exit $rc
+
+      - name: Diagnóstico do app montado (Windows)
+        if: matrix.nome == 'windows'
+        shell: bash
+        run: |
+          echo "### Windows" > diag-windows.txt
+          cat whisper-versao.txt >> diag-windows.txt
+          set +e
+          "dist/Estudio/estudio-terminal.exe" diagnostico "build/2026-01-01 10-00-00.mov" > d.txt 2>&1
+          rc=$?
+          cat d.txt | tee -a diag-windows.txt
+          du -sh "dist/Estudio" | tee -a diag-windows.txt
+          echo "::notice title=Diagnóstico Windows::$(tr '\n' '|' < diag-windows.txt)"
+          exit $rc
+
+      - name: Sem PowerShell no app (Windows)
+        if: matrix.nome == 'windows'
+        shell: bash
+        run: |
+          if grep -rniIE "[\"'](powershell|pwsh)|encodedcommand" estudio --include=*.py; then
+            echo "::error title=Antivírus::o código do app chama o PowerShell"; exit 1
+          fi
+
+      # ---------------------------------------------------------------- compactar (limite do GitHub: 2 GB por arquivo)
+      - name: Compactar (Mac)
+        if: matrix.nome == 'mac'
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "dist/Estudio.app" "Estudio-mac.zip"
+          T=$(stat -f%z Estudio-mac.zip); echo "Estudio-mac.zip $((T/1048576)) MB" | tee -a diag-mac.txt
+          [ "$T" -lt 2000000000 ] || { echo "::error title=Tamanho::o app do Mac passou de 2 GB ($((T/1048576)) MB)"; exit 1; }
+
+      - name: Compactar (Windows)
+        if: matrix.nome == 'windows'
+        shell: bash
+        run: |
+          cd dist && 7z a -tzip -mx=5 ../Estudio-windows.zip Estudio > /dev/null && cd ..
+          T=$(stat -c%s Estudio-windows.zip); echo "Estudio-windows.zip $((T/1048576)) MB" | tee -a diag-windows.txt
+          [ "$T" -lt 2000000000 ] || { echo "::error title=Tamanho::o app do Windows passou de 2 GB ($((T/1048576)) MB)"; exit 1; }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.nome }}
+          path: |
+            *.zip
+            diag-*.txt
+          retention-days: 1
+          compression-level: 0
+
+  publicar:
+    needs: montar
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: pacotes
+          merge-multiple: true
+
+      - name: Publicar em Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSAO: ${{ inputs.versao }}
+        run: |
+          ls -la pacotes
+          if [ -n "$VERSAO" ] || [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if [ -n "$VERSAO" ]; then TAG="v$VERSAO"; else TAG="${GITHUB_REF#refs/tags/}"; fi
+            TIT="Estúdio ${TAG#v}"; PRE="--latest"
+            AVISO="Versão oficial. Mac: baixe Estudio-mac.zip · Windows: baixe Estudio-windows.zip."
+          else
+            TAG="montagem-${GITHUB_RUN_NUMBER}"; TIT="Montagem ${GITHUB_RUN_NUMBER} (teste)"; PRE="--prerelease"
+            AVISO="Versão de TESTE, ainda não liberada para as equipes."
+          fi
+          {
+            echo "$AVISO"
+            echo
+            echo "Mac (Apple Silicon, macOS 13.5 ou mais novo) e Windows 10/11 (64 bits). Whisper (transcrição) e ffmpeg já vão dentro. Como instalar: veja o [INSTALAR.md](https://github.com/$GITHUB_REPOSITORY/blob/main/INSTALAR.md)."
+            echo
+            echo "<details><summary>Diagnóstico da montagem</summary>"
+            echo
+            echo '```'
+            cat pacotes/diag-*.txt 2>/dev/null
+            echo '```'
+            echo "</details>"
+          } > notas.md
+          if ! gh release create "$TAG" pacotes/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+                 --title "$TIT" $PRE --notes-file notas.md > saida.txt 2>&1; then
+            echo "::error title=Release::$(tail -c 1500 saida.txt | tr '\n' ' ')"
+            exit 1
+          fi
+          cat saida.txt

@@ -8,12 +8,15 @@
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
+<div class="fechado hidden" id="fechado"><div class="caixa"><div class="ses-nome">O Estúdio foi fechado.</div>
+  <div class="dica">As gravações novas ficam esperando na pasta do OBS até você abrir o Estúdio de novo. Pode fechar esta aba.</div></div></div>
 <div class="janela" id="janela">
   <div class="topo">
     <div class="luzes"><i></i><i></i><i></i></div>
     <div class="titulo">Estúdio <small id="versao"></small> <small id="maquina"></small></div>
     <button class="btn pequeno so-cheia" id="abrir-mini" title="Abre uma janela pequena para deixar ao lado do OBS">Abrir janelinha</button>
     <button class="icone so-cheia" id="abrir-config" title="Configurações">⚙</button>
+    <button class="btn pequeno fraco so-cheia" id="fechar-app" title="Desliga o Estúdio neste computador">Fechar o Estúdio</button>
   </div>
 
   <div class="faixa-aviso hidden" id="faltando"></div>
