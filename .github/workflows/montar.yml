@@ -137,7 +137,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: whisper
-          key: whispercpp-windows-v1
+          key: whispercpp-windows-v2
 
       - name: whisper.cpp pronto (Windows)
         if: matrix.nome == 'windows' && steps.wcpp.outputs.cache-hit != 'true'
@@ -156,7 +156,7 @@ jobs:
           CLI=$(find wcpp -iname 'whisper-cli.exe' | head -1)
           if [ -z "$CLI" ]; then echo "::warning title=whisper.cpp::$ASSET sem whisper-cli.exe: $(find wcpp -iname '*.exe' | tr '\n' ' ')"; exit 1; fi
           mkdir -p whisper
-          cp "$(dirname "$CLI")"/*.exe "$(dirname "$CLI")"/*.dll whisper/
+          cp "$CLI" whisper/whisper-cli.exe && cp "$(dirname "$CLI")"/ggml*.dll "$(dirname "$CLI")"/whisper.dll whisper/
           echo "whisper.cpp $(head -1 rel.txt) ($ASSET)" > whisper/VERSAO.txt
           ls -la whisper
 
@@ -173,7 +173,7 @@ jobs:
           CLI=$(find wcpp-src/build -iname 'whisper-cli.exe' | head -1)
           [ -n "$CLI" ] || { echo "::error title=whisper.cpp::compilou mas não achei o whisper-cli.exe"; exit 1; }
           mkdir -p whisper
-          cp "$(dirname "$CLI")"/*.exe "$(dirname "$CLI")"/*.dll whisper/
+          cp "$CLI" whisper/whisper-cli.exe && cp "$(dirname "$CLI")"/ggml*.dll "$(dirname "$CLI")"/whisper.dll whisper/
           echo "whisper.cpp $(git -C wcpp-src rev-parse --short HEAD) (montado do código)" > whisper/VERSAO.txt
           ls -la whisper
 
@@ -182,7 +182,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: whisper
-          key: whispercpp-windows-v1
+          key: whispercpp-windows-v2
 
       - name: Versão oficial
         if: startsWith(github.ref, 'refs/tags/v') || inputs.versao != ''
