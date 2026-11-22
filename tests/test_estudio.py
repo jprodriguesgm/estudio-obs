@@ -300,3 +300,23 @@ def test_trocar_codigo_do_professor(app, pd):
     est.escolhas_codigo["b2"] = 0
     b = est.agenda().evento("b2")
     assert b.codigo == "26_646" and b.pasta == "26_646 Bruno Chiriu" and "não encontrada" in b.aviso
+
+
+def test_agenda_de_outro_dia(app, pd, monkeypatch):
+    """Escolher um professor na agenda de amanhã: a gravação de hoje vai para a pasta do dia da agenda."""
+    from estudio import vigia
+    est, cfg = app["est"], app["cfg"]
+    amanha = date.today() + timedelta(days=1)
+    est.mudar_dia(amanha)
+    est.atualizar_agenda(esperar=True)
+    a = est.agenda()
+    assert a.data == amanha and {"acao": "carregar", "data": amanha.isoformat()} in pd
+    est.selecionar("a1")
+    dia = amanha.strftime("%Y %m %d")
+    assert {"acao": "criar", "pasta": "P824", "data": amanha.isoformat()} in pd
+    _gravar_e_parar(est, cfg, time.strftime("%H-%M-%S"), time.time())
+    r = est.registro[-1]
+    assert r["pasta"] == "26_824 Jorge Augusto Pereira" and r["dia"] == dia
+    assert (Path(cfg["pasta_saida"]) / r["pasta"] / dia / "Footage" / r["arquivo"]).is_file()
+    est.mudar_dia(None)
+    assert est.dia_agenda is None

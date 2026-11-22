@@ -8,7 +8,7 @@ confere tudo numa tela; depois do envio, o app compara nome e tamanho no destino
 Parte C do superprojeto integrado. Segue o modelo do Montador e do Revisor: janela no navegador, Mac e
 Windows, sem administrador.
 
-> **Versão 0.3.0 — testes por fases.** Ainda sem empacotamento pelo GitHub Actions: roda com o `python3`
+> **Versão 0.3.1 — testes por fases.** Ainda sem empacotamento pelo GitHub Actions: roda com o `python3`
 > do Mac. Roteiros: [TESTE-FASE-1.md](TESTE-FASE-1.md) (simulação), [TESTE-FASE-3.md](TESTE-FASE-3.md) (Drive) e
 > [TESTE-AGENDA.md](TESTE-AGENDA.md) (fluxo pela agenda do Pastas do dia).
 

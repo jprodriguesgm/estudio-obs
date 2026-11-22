@@ -139,6 +139,21 @@ def acao_codigo(corpo) -> dict:
     return acao_estado()
 
 
+def acao_dia(corpo) -> dict:
+    """‹ › e Hoje na agenda. corpo: {"data": "AAAA-MM-DD"} ou {"passo": -1|1} ou {} para hoje."""
+    from datetime import date, timedelta
+    if corpo.get("passo"):
+        ESTUDIO.mudar_dia(ESTUDIO.dia_mostrado() + timedelta(days=int(corpo["passo"])))
+    elif corpo.get("data"):
+        try:
+            ESTUDIO.mudar_dia(date.fromisoformat(corpo["data"]))
+        except ValueError:
+            raise ApiError("Data inválida.")
+    else:
+        ESTUDIO.mudar_dia(None)
+    return acao_estado()
+
+
 def acao_atualizar_agenda(_corpo) -> dict:
     ESTUDIO.atualizar_agenda(esperar=True)
     return acao_estado()
@@ -157,7 +172,7 @@ POST = {"/api/config": acao_config, "/api/escolher": acao_escolher, "/api/trocar
         "/api/mover": acao_mover, "/api/subir": acao_subir, "/api/esquecer": acao_esquecer,
         "/api/mostrar": acao_mostrar, "/api/testar": acao_testar, "/api/selecionar": acao_selecionar,
         "/api/voltar": acao_voltar, "/api/codigo": acao_codigo, "/api/atualizar_agenda": acao_atualizar_agenda,
-        "/api/testar_pd": acao_testar_pd}
+        "/api/testar_pd": acao_testar_pd, "/api/dia": acao_dia}
 
 
 # ====================================================================== HTTP

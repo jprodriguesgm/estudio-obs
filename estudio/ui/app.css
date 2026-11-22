@@ -126,3 +126,9 @@ body.mini .troca .campo{flex-basis:100%}
 .troca-det summary{font-size:12px;color:var(--fraco);margin-top:6px}
 .troca-det[open] summary{margin-bottom:6px}
 body.mini .troca-det{display:block}
+
+/* navegação de dia */
+.nav-dia{display:inline-flex;gap:4px;align-items:center;margin-left:6px}
+.nav-dia .btn.pequeno{padding:2px 9px;font-size:13px}
+.campo.data{flex:none;width:auto;padding:3px 8px;font-size:12px;color-scheme:dark}
+.faixa-aviso.dentro{margin:0 0 10px;font-size:12px}

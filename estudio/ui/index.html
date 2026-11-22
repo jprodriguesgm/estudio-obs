@@ -37,9 +37,16 @@
   <!-- Tela 1: agenda do dia -->
   <div id="tela-agenda" class="so-cheia">
     <div class="caixa">
-      <div class="rotulo">Agenda de hoje <span id="agenda-data"></span>
+      <div class="rotulo"><span id="agenda-titulo">Agenda de hoje</span>
+        <span class="nav-dia" id="nav-dia">
+          <button class="btn pequeno" id="dia-ant" title="Dia anterior">‹</button>
+          <input type="date" class="campo data" id="dia-escolha">
+          <button class="btn pequeno" id="dia-prox" title="Próximo dia">›</button>
+          <button class="btn pequeno" id="dia-hoje">Hoje</button>
+        </span>
         <span class="dica-inline" id="agenda-info"></span>
         <button class="btn pequeno" id="atualizar-agenda" title="Busca de novo no Pastas do dia">Atualizar</button></div>
+      <div class="faixa-aviso dentro hidden" id="aviso-outro-dia"></div>
       <div id="agenda"></div>
     </div>
     <div class="caixa" id="caixa-outras">

@@ -60,6 +60,7 @@ class Estudio:
         self.escolhas_codigo: dict[str, int] = {}  # id do evento → índice do código escolhido
         self.pasta_dia_urls: dict[str, str] = {}   # id do evento → link da pasta do dia no Drive (depois de criar)
         self.sessao: str | None = None            # id do evento aberto na tela do professor
+        self.dia_agenda: date | None = None       # dia mostrado na agenda (None = hoje); serve para testar outro dia
         self.registro: list[dict] = self._carregar_registro()
         self.ultimo_ciclo: float = 0.0
         self._thread: threading.Thread | None = None
@@ -110,7 +111,7 @@ class Estudio:
         url = (cfg.get("pastas_do_dia_url") or "").strip()
         if not url or self.pd.get("carregando"):
             return
-        hoje = _agora().date().isoformat()
+        hoje = self.dia_mostrado().isoformat()
         self.pd["carregando"] = True
 
         def buscar():
@@ -119,6 +120,8 @@ class Estudio:
                 with self.lock:
                     self.pd.update(data=hoje, dados=dados, quando=time.time(), erro=None)
                 try:
+                    if hoje != _agora().date().isoformat():
+                        raise OSError("só guarda a cópia de hoje")
                     self._arq_cache_pd().write_text(json.dumps({"data": hoje, "dados": dados, "quando": time.time()},
                                                                ensure_ascii=False), encoding="utf-8")
                 except OSError:
@@ -134,12 +137,24 @@ class Estudio:
         else:
             threading.Thread(target=buscar, daemon=True).start()
 
+    def dia_mostrado(self) -> date:
+        return self.dia_agenda or _agora().date()
+
+    def mudar_dia(self, dia: date | None):
+        """Mostra a agenda de outro dia (‹ › na tela). None = hoje. Busca no Pastas do dia na hora."""
+        hoje = _agora().date()
+        self.dia_agenda = None if (dia is None or dia == hoje) else dia
+        self.sessao = None
+        if self.pd.get("data") != self.dia_mostrado().isoformat():
+            self.pd.update(data=None, dados=None, quando=0, erro=None)
+            self.atualizar_agenda()
+
     def agenda(self, cfg: dict | None = None) -> ag.Agenda:
         cfg = cfg or appdata.carregar()
         url = (cfg.get("pastas_do_dia_url") or "").strip()
         if not url:
             return ag.ler(cfg.get("agenda"))
-        hoje = _agora().date()
+        hoje = self.dia_mostrado()
         pd = self.pd
         velha = time.time() - (pd.get("quando") or 0) > 15 * 60
         if (pd.get("data") != hoje.isoformat() or velha) and not pd.get("carregando"):
@@ -192,7 +207,7 @@ class Estudio:
         elif url:
             avisos.append("pasta do professor não encontrada no Drive; o envio cria uma com este nome")
         with self.lock:
-            self.trocar(e.pasta)
+            self.trocar(e.pasta, dia_pasta=dia if a.data != _agora().date() else None)
             self.sessao = evento_id
         return {"pasta": e.pasta, "avisos": avisos}
 
@@ -207,7 +222,7 @@ class Estudio:
                               t["pasta"], "", True)
         return d
 
-    def trocar(self, pasta: str | None, quando: datetime | None = None) -> dict | None:
+    def trocar(self, pasta: str | None, quando: datetime | None = None, dia_pasta: str | None = None) -> dict | None:
         """"Trocar professor": a partir de agora, o que a agenda mandaria para <chave atual> vai para <pasta>.
 
         Vale para a gravação em andamento e as próximas, até a agenda apontar outro horário.
@@ -226,11 +241,12 @@ class Estudio:
                 if h:
                     ref = h
             d = ag.decidir(ref, self.agenda(cfg), int(cfg.get("antecedencia_min") or 30))
-            if d.pasta == pasta:                  # a agenda já manda para este professor
+            if d.pasta == pasta and not dia_pasta:   # a agenda já manda para este professor
                 self.troca = None
                 return None
+            # dia_pasta: professor escolhido na agenda de outro dia → a pasta do dia é a data da agenda
             self.troca = {"chave": d.chave, "pasta": pasta, "dia": ref.date().isoformat(),
-                          "agenda_dizia": d.pasta}
+                          "agenda_dizia": d.pasta, "dia_pasta": dia_pasta}
             return self.troca
 
     # ------------------------------------------------------------------ vigia
@@ -318,6 +334,8 @@ class Estudio:
             return
         d = self.decidir(quando, agenda, cfg)
         dia = ag.pasta_dia(quando.date())
+        if d.trocado and self.troca and self.troca.get("dia_pasta"):
+            dia = self.troca["dia_pasta"]
         destino_dir = self._footage(cfg, d.pasta, dia)
         tam = p.stat().st_size
         try:
@@ -333,7 +351,7 @@ class Estudio:
         dur = info.get("duracao") or mp4info.ffprobe(alvo)
         self.registro.append({
             "id": uuid.uuid4().hex[:10], "arquivo": alvo.name, "inicio": quando.isoformat(timespec="seconds"),
-            "data": quando.date().isoformat(), "dia": dia, "pasta": d.pasta, "regra": d.regra, "aviso": d.aviso,
+            "data": datetime.strptime(dia, "%Y %m %d").date().isoformat(), "dia": dia, "pasta": d.pasta, "regra": d.regra, "aviso": d.aviso,
             "pasta_agenda": d.pasta if not d.trocado else None, "trocado": d.trocado,
             "caminho": str(alvo), "tamanho": tam, "duracao": dur, "estado": "na pasta", "msg": "",
             "movido_em": datetime.now().isoformat(timespec="seconds"),
@@ -569,8 +587,6 @@ class Estudio:
             parados = [{"arquivo": n, "erro": e} for n, e in self.erros.items() if n not in {g["arquivo"] for g in gravando}]
             # o que vale "agora" (sem gravação): mostra quem receberia uma gravação que começasse neste minuto
             ref = ag.hora_do_nome(gravando[-1]["arquivo"]) if gravando else agora
-            if agenda.data and not gravando and agora.date() != agenda.data:
-                ref = datetime.combine(agenda.data, agora.time())   # agenda de outro dia: simula o horário nela
             atual = self.decidir(ref, agenda, cfg)
             return {
                 "agenda": agenda.para_json(), "opcoes": agenda.pastas(),
@@ -578,6 +594,7 @@ class Estudio:
                 "referencia": ref.isoformat(timespec="seconds"),
                 "troca": self.troca, "grupos": self.grupos(), "faltando": appdata.faltando(cfg),
                 "sessao": self._sessao_json(agenda),
+                "hoje": agora.date().isoformat(), "outro_dia": self.dia_agenda is not None,
                 "vigia_ok": time.time() - self.ultimo_ciclo < 5,
             }
 

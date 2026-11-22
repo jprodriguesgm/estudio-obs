@@ -109,9 +109,20 @@ const diaHoje = (e) => e.agenda.data ? e.agenda.data.replace(/-/g, " ") : "";
 
 function desenharAgenda(e) {
   const a = e.agenda;
-  $("#agenda-data").textContent = a.data ? "· " + dataBR(a.data) : "";
+  const pd = a.fonte === "pastas do dia";
+  const semana = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  const diaTxt = a.data ? semana[new Date(a.data + "T12:00:00").getDay()] + " " + dataBR(a.data) : "";
+  $("#agenda-titulo").textContent = e.outro_dia ? `Agenda de ${diaTxt}` : `Agenda de hoje${diaTxt ? " · " + diaTxt : ""}`;
   $("#agenda-info").textContent = a.info || "";
-  $("#atualizar-agenda").classList.toggle("hidden", a.fonte !== "pastas do dia");
+  $("#atualizar-agenda").classList.toggle("hidden", !pd);
+  $("#nav-dia").classList.toggle("hidden", !pd);
+  $("#dia-hoje").classList.toggle("hidden", !e.outro_dia);
+  if (a.data && document.activeElement !== $("#dia-escolha")) $("#dia-escolha").value = a.data;
+  const av = $("#aviso-outro-dia");
+  if (e.outro_dia) {
+    av.innerHTML = `Você está vendo a agenda de <b>${esc(diaTxt)}</b>, não a de hoje. Se escolher um professor aqui, as gravações de agora vão para ele, na pasta do dia <b>${esc(a.data.replace(/-/g, " "))}</b>.`;
+    av.classList.remove("hidden");
+  } else av.classList.add("hidden");
 
   const caixa = $("#agenda");
   const dados = [a, e.atual.chave, e.troca, e.grupos.map((g) => [g.pasta, g.dia, g.itens.length, g.enviado, g.envio && g.envio.estado])];
@@ -234,6 +245,10 @@ $("#troca-btn").onclick = () => acao("/api/trocar", {pasta: $("#troca-select").v
 $("#troca-voltar").onclick = () => acao("/api/trocar", {pasta: null});
 $("#abrir-mini").onclick = () => window.open("/?mini=1", "estudio-janelinha", "width=440,height=260");
 $("#voltar").onclick = () => acao("/api/voltar", {});
+$("#dia-ant").onclick = (ev) => acao("/api/dia", {passo: -1}, ev.target);
+$("#dia-prox").onclick = (ev) => acao("/api/dia", {passo: 1}, ev.target);
+$("#dia-hoje").onclick = (ev) => acao("/api/dia", {}, ev.target);
+$("#dia-escolha").onchange = (ev) => { if (ev.target.value) acao("/api/dia", {data: ev.target.value}); };
 $("#atualizar-agenda").onclick = (ev) => { ev.target.textContent = "Atualizando…"; acao("/api/atualizar_agenda", {}, ev.target).then(() => ev.target.textContent = "Atualizar"); };
 
 document.addEventListener("change", (ev) => {
