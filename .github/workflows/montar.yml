@@ -131,22 +131,58 @@ jobs:
           path: modelos
           key: modelo-${{ matrix.nome }}-v1
 
-      - name: whisper.cpp (Windows)
+      - name: whisper.cpp (cache)
         if: matrix.nome == 'windows'
+        id: wcpp
+        uses: actions/cache/restore@v6
+        with:
+          path: whisper
+          key: whispercpp-windows-v1
+
+      - name: whisper.cpp pronto (Windows)
+        if: matrix.nome == 'windows' && steps.wcpp.outputs.cache-hit != 'true'
+        id: pronto
+        continue-on-error: true
         shell: bash
         run: |
-          gh release view --repo ggml-org/whisper.cpp --json tagName,assets --jq '.tagName, (.assets[].name)' | tee rel.txt
-          ASSET=$(grep -x 'whisper-blas-bin-x64.zip' rel.txt || grep -x 'whisper-bin-x64.zip' rel.txt)
-          [ -n "$ASSET" ] || { echo "::error title=whisper.cpp::não achei o pacote para Windows na última versão"; exit 1; }
-          gh release download --repo ggml-org/whisper.cpp --pattern "$ASSET" --dir wcpp
-          cd wcpp && 7z x -y "$ASSET" > /dev/null && cd ..
+          set +e
+          gh release view --repo ggml-org/whisper.cpp --json tagName,assets --jq '.tagName, (.assets[].name)' > rel.txt 2> rel-erro.txt
+          echo "::notice title=whisper.cpp (versão)::$(tr '\n' ' ' < rel.txt) $(tr '\n' ' ' < rel-erro.txt)"
+          ASSET=$(grep -x 'whisper-blas-bin-x64.zip' rel.txt)
+          [ -n "$ASSET" ] || ASSET=$(grep -x 'whisper-bin-x64.zip' rel.txt)
+          if [ -z "$ASSET" ]; then echo "::warning title=whisper.cpp::sem pacote pronto para Windows; vou montar do código"; exit 1; fi
+          gh release download --repo ggml-org/whisper.cpp --pattern "$ASSET" --dir wcpp || { echo "::warning title=whisper.cpp::não baixou $ASSET"; exit 1; }
+          (cd wcpp && 7z x -y "$ASSET" > /dev/null)
           CLI=$(find wcpp -iname 'whisper-cli.exe' | head -1)
-          [ -n "$CLI" ] || CLI=$(find wcpp -iname 'main.exe' | head -1)
-          [ -n "$CLI" ] || { echo "::error title=whisper.cpp::sem whisper-cli.exe no pacote"; exit 1; }
+          if [ -z "$CLI" ]; then echo "::warning title=whisper.cpp::$ASSET sem whisper-cli.exe: $(find wcpp -iname '*.exe' | tr '\n' ' ')"; exit 1; fi
           mkdir -p whisper
-          cp "$(dirname "$CLI")"/*.exe "$(dirname "$CLI")"/*.dll whisper/ 2>/dev/null || true
+          cp "$(dirname "$CLI")"/*.exe "$(dirname "$CLI")"/*.dll whisper/
+          echo "whisper.cpp $(head -1 rel.txt) ($ASSET)" > whisper/VERSAO.txt
           ls -la whisper
-          echo "whisper.cpp $(head -1 rel.txt) ($ASSET)" > whisper-versao.txt
+
+      - name: whisper.cpp do código (Windows, se o pronto falhar)
+        if: matrix.nome == 'windows' && steps.wcpp.outputs.cache-hit != 'true' && steps.pronto.outcome != 'success'
+        shell: bash
+        run: |
+          rm -rf whisper wcpp-src
+          git clone --depth 1 https://github.com/ggml-org/whisper.cpp wcpp-src
+          cmake -S wcpp-src -B wcpp-src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+            -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON > cmake.txt 2>&1 || { echo "::error title=whisper.cpp (cmake)::$(tail -c 2000 cmake.txt | tr '\n' ' ')"; exit 1; }
+          cmake --build wcpp-src/build --config Release -j 4 > build.txt 2>&1 || { echo "::error title=whisper.cpp (compilar)::$(grep -i error build.txt | tail -c 2000 | tr '\n' ' ')"; exit 1; }
+          CLI=$(find wcpp-src/build -iname 'whisper-cli.exe' | head -1)
+          [ -n "$CLI" ] || { echo "::error title=whisper.cpp::compilou mas não achei o whisper-cli.exe"; exit 1; }
+          mkdir -p whisper
+          cp "$(dirname "$CLI")"/*.exe "$(dirname "$CLI")"/*.dll whisper/
+          echo "whisper.cpp $(git -C wcpp-src rev-parse --short HEAD) (montado do código)" > whisper/VERSAO.txt
+          ls -la whisper
+
+      - name: Guardar o whisper.cpp no cache
+        if: matrix.nome == 'windows' && steps.wcpp.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: whisper
+          key: whispercpp-windows-v1
 
       - name: Versão oficial
         if: startsWith(github.ref, 'refs/tags/v') || inputs.versao != ''
@@ -225,7 +261,7 @@ jobs:
         shell: bash
         run: |
           echo "### Windows" > diag-windows.txt
-          cat whisper-versao.txt >> diag-windows.txt
+          cat whisper/VERSAO.txt >> diag-windows.txt
           set +e
           "dist/Estudio/estudio-terminal.exe" diagnostico "build/2026-01-01 10-00-00.mov" > d.txt 2>&1
           rc=$?

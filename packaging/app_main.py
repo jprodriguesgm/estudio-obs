@@ -72,6 +72,8 @@ def diagnostico(video: str | None = None) -> int:
 
 
 def main() -> int:
+    import multiprocessing
+    multiprocessing.freeze_support()     # bibliotecas do Whisper abrem processos auxiliares; no app empacotado precisa disto
     args = [a for a in sys.argv[1:] if not a.startswith("-psn_")]   # o Finder antigo manda "-psn_…"
     if args and args[0] == "diagnostico":
         return diagnostico(args[1] if len(args) > 1 else None)
