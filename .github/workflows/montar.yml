@@ -1,5 +1,6 @@
 # Monta o Estúdio para Mac (Apple Silicon) e Windows e publica em "Releases".
-# Roda quando alguém aperta "Run workflow" (aba Actions) ou quando sobe uma etiqueta v1.2.3.
+# Roda quando alguém aperta "Run workflow" (aba Actions), quando sobe uma etiqueta v1.2.3
+# ou quando alguém envia para o ramo "montagem" (montagem de teste).
 #   - "Versão oficial" vazia → "Montagem N (teste)", pré-lançamento.
 #   - "Versão oficial" = 1.2.3 (ou etiqueta v1.2.3) → versão oficial, no link releases/latest.
 # O Whisper vai dentro: Mac = mlx-whisper (o mesmo do transcribe); Windows = whisper.cpp.
@@ -20,6 +21,7 @@ on:
         default: ""
   push:
     tags: ["v*"]
+    branches: ["montagem"]     # enviar para o ramo "montagem" = montagem de teste (sem apertar nada)
 
 permissions:
   contents: write
