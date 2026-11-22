@@ -1,78 +1,47 @@
 # Instalar o Estúdio
 
-Uma vez em cada computador do estúdio. Leva uns 20 minutos no Mac e uns 30 no Windows (por causa do rclone).
+Uma vez em cada computador do estúdio. O app já leva dentro o **Whisper** (transcrição) e o **ffmpeg**:
+não precisa instalar Python nem o transcribe.
 
-O Estúdio precisa de:
+**Baixar** (sempre a versão oficial mais nova):
+- Mac: https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip
+- Windows: https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-windows.zip
 
-| O quê | Para quê | Mac | Windows |
-|---|---|---|---|
-| **Python 3.10 ou mais novo** | roda o app | obrigatório | obrigatório |
-| **rclone** com a conexão `drive` (conta da instituição) | subir para o Drive | obrigatório | obrigatório |
-| **Link do Pastas do dia** (implantação "Estúdio", acesso "Qualquer pessoa") | agenda e pastas no Drive | obrigatório | obrigatório |
-| **transcribe** (mlx-whisper + ffmpeg) | transcrever antes de subir | opcional (só Mac com chip Apple) | não existe |
-| **OBS** | gravar | qualquer versão | qualquer versão |
+O que cada computador precisa:
 
-Não precisa de senha de administrador para nada do Estúdio em si.
+| | Mac | Windows |
+|---|---|---|
+| Sistema | Mac com chip Apple (M1 ou mais novo), **macOS 13.5 ou mais novo** | Windows 10 ou 11, 64 bits |
+| **rclone** com a conexão `drive` (conta da instituição) | já pronto nos Macs com o **Subir no Drive** | instalar (passo 2 abaixo) |
+| **Link do Pastas do dia** (implantação "Estúdio") | colar nas Configurações | colar nas Configurações |
+| Transcrição | mlx-whisper, dentro do app (igual ao transcribe) | whisper.cpp, dentro do app |
+| OBS | qualquer versão, nome de arquivo padrão | igual |
 
----
-
-## Mac do trabalho
-
-### 1. Python
-
-No Terminal: `python3 --version`
-
-- Apareceu **3.10** ou mais → ok.
-- Não tem, ou é 3.9 → baixe o instalador de **python.org** (macOS, "universal2") e instale. Se o Mac pedir senha de
-  administrador e você não tiver, rode `xcode-select --install` (vem um Python 3.9, que também deve funcionar).
-
-### 2. rclone (já está nos Macs do setor)
-
-Os Macs que têm o **Subir no Drive** já estão prontos: o Estúdio usa a mesma conexão sozinho.
-Se o Mac não tiver o Subir no Drive, rode o instalador dele primeiro (é o jeito mais fácil de deixar o rclone com a
-conta certa e a permissão de enviar).
-
-### 3. transcribe (opcional)
-
-Só se quiser que o app transcreva antes de subir. No Mac onde ele já funciona, nada a fazer.
-Em outro Mac (chip Apple): instale o ffmpeg e o mlx-whisper e copie o arquivo `transcribe` para `/usr/local/bin`
-(igual ao seu Mac). Sem ele, o app sobe sem transcrever e avisa.
-
-### 4. O app
-
-1. Copie a pasta `estudio-obs` para um lugar fixo, por exemplo **Documentos**.
-2. Dois cliques em **Abrir Estudio.command**.
-   - Primeira vez: se o Mac bloquear, botão direito → **Abrir** → **Abrir**.
-   - Se pedir para o Terminal acessar arquivos de um **volume removível** (o SSD), clique em **Permitir**.
-3. O navegador abre o Estúdio. **Deixe a janela do Terminal aberta** enquanto estiver gravando.
-
-### 5. Configurar (engrenagem ⚙)
-
-1. **Nome desta máquina:** ex.: `Estúdio 1 — São Gabriel`.
-2. **Link do Pastas do dia:** o link da implantação "Estúdio" (o que você testou hoje) → **Testar**.
-3. **Pasta onde o OBS grava:** a mesma que está no OBS em *Configurações → Saída → Gravação → Caminho*
-   (ex.: o SSD Ilha 3).
-4. **Pasta de saída:** onde nascem as pastas dos professores (pode ser no mesmo SSD, ex.: `SSD/Estudio`).
-5. **Como subir:** *Pelo rclone*. **Pasta no Drive:** `drive:Gravações IEC` → **Testar conexão** → tem que
-   mostrar a conta da instituição.
-6. **Transcrever antes de subir:** marcado se tiver o transcribe.
-7. **Salvar**. A agenda de hoje aparece.
-
-### 6. OBS (conferir, não mudar)
-
-*Configurações → Avançado → Gravação → Formato do nome do arquivo* tem que ser o padrão:
-`%CCYY-%MM-%DD %hh-%mm-%ss`. O app usa a data e a hora do nome. Formato do vídeo: mp4, mov ou mkv, tanto faz.
+O app tem cerca de 2 GB por causa do modelo do Whisper. Nada precisa de senha de administrador.
 
 ---
+
+## Mac
+
+1. Baixe o **Estudio-mac.zip**, abra (vira **Estudio.app**) e arraste para **Aplicativos**.
+2. **Primeira vez:** botão direito no Estudio → **Abrir** → **Abrir**. (O app não é da App Store; depois da
+   primeira vez, abre com dois cliques.) Se o Mac disser que "não pode ser aberto", vá em
+   *Ajustes do Sistema → Privacidade e Segurança* e clique em **Abrir Mesmo Assim**.
+3. Se pedir para acessar arquivos de um **volume removível** (o SSD), clique em **Permitir**.
+4. A tela abre no navegador. Para deixar fácil: arraste o Estudio para o Dock.
+
+O rclone: se o Mac tem o **Subir no Drive**, o Estúdio usa a mesma conexão sozinho. Se não tem, instale o Subir
+no Drive primeiro (é o jeito mais fácil de deixar o rclone com a conta certa e a permissão de enviar).
 
 ## Windows
 
-### 1. Python
+### 1. O app
 
-1. Baixe em **python.org → Downloads → Windows** o instalador do Python 3.12 ou 3.13 (64-bit).
-2. Na primeira tela, marque **Add python.exe to PATH** e clique em **Install Now**
-   (instala só para o usuário, sem administrador).
-3. Confira no Prompt de Comando: `py --version`.
+1. Baixe o **Estudio-windows.zip** → botão direito → **Extrair tudo** → escolha **Documentos**.
+2. Abra a pasta **Estudio** e dê dois cliques em **Estudio.exe**.
+   - "O Windows protegeu o computador": **Mais informações → Executar assim mesmo**.
+   - Se o Firewall perguntar: pode permitir só em redes privadas (o app só conversa com o próprio computador).
+3. Para deixar fácil: botão direito no **Estudio.exe** → **Mostrar mais opções → Enviar para → Área de trabalho (criar atalho)**.
 
 ### 2. rclone
 
@@ -91,34 +60,48 @@ Em outro Mac (chip Apple): instale o ffmpeg e o mlx-whisper e copie o arquivo `t
    - Shared Drive: **n** (a "Gravações IEC" fica no Meu Drive) · Keep this remote: **y** → `q` para sair
 4. Teste: `rclone lsd "drive:Gravações IEC"` lista as pastas dos professores.
 
-### 3. O app
-
-1. Copie a pasta `estudio-obs` para, por exemplo, **Documentos**.
-2. Dois cliques em **Abrir Estudio.bat**.
-   - Se o Windows mostrar "O Windows protegeu o computador": **Mais informações → Executar assim mesmo**.
-   - Se o Firewall perguntar: pode permitir só em redes privadas (o app só conversa com o próprio computador).
-3. O navegador abre o Estúdio. **Deixe a janela preta aberta** enquanto estiver gravando.
-
-### 4. Configurar (engrenagem ⚙)
-
-Igual ao Mac, com estas diferenças:
-- **Onde está o rclone:** escolha o `rclone.exe` (ex.: `C:\rclone\rclone.exe`).
-- **Pasta no Drive:** `drive:Gravações IEC` → **Testar conexão**.
-- **Transcrever antes de subir:** desmarque (no Windows ainda não existe). A transcrição pode ser feita depois num Mac.
-
-### 5. O que é normal no Windows
-
-- Enquanto o OBS grava, o Windows não deixa mover o arquivo. Logo depois de parar, pode aparecer por alguns
-  segundos "Não consegui mover ainda": o app tenta de novo sozinho.
-
 ---
+
+## Configurar (engrenagem ⚙, igual no Mac e no Windows)
+
+1. **Nome desta máquina:** ex.: `Estúdio 1 — São Gabriel`.
+2. **Link do Pastas do dia:** o link da implantação "Estúdio" → **Testar**.
+3. **Pasta onde o OBS grava:** a mesma do OBS em *Configurações → Saída → Gravação → Caminho*.
+4. **Pasta de saída:** onde nascem as pastas dos professores (pode ser no mesmo disco, ex.: `SSD/Estudio`).
+5. **Como subir:** *Pelo rclone*. **Pasta no Drive:** `drive:Gravações IEC`.
+   No Windows, em **Onde está o rclone**, escolha o `rclone.exe`. → **Testar conexão** (tem que mostrar a conta da instituição).
+6. **Transcrever antes de subir:** marcado. A linha embaixo mostra "Transcrição: Whisper do app".
+7. **Salvar**. A agenda de hoje aparece.
+
+**OBS (conferir, não mudar):** *Configurações → Avançado → Gravação → Formato do nome do arquivo* tem que ser o
+padrão `%CCYY-%MM-%DD %hh-%mm-%ss`. O formato do vídeo (mp4, mov ou mkv) tanto faz.
+
+## Ligar e desligar
+
+- **Ligar:** dois cliques no Estúdio. Não abre janela de terminal: o app fica ligado em segundo plano, vigiando a
+  pasta do OBS, e a tela abre no navegador.
+- **Fechou o navegador sem querer?** Dois cliques no Estúdio de novo: só abre a tela.
+- **Desligar:** botão **Fechar o Estúdio** no alto da tela (clique duas vezes). Com ele desligado, as gravações
+  novas ficam esperando na pasta do OBS até você abrir de novo.
 
 ## Teste rápido depois de instalar (5 minutos)
 
 1. A agenda de hoje aparece, com o professor do horário marcado como **agora**.
 2. **Gravar com este professor** → **Abrir no Drive ↗** abre a pasta do dia com Footage e Originais.
 3. Grave 15 segundos no OBS. A janelinha mostra **● Gravando agora**. Ao parar, o clipe aparece na tela do professor.
-4. **Conferido, pode subir** → "enviado, pode apagar" e o clipe está na Footage do Drive.
+4. **Conferido, pode subir** → 1/3 transcrevendo → 2/3 subindo → 3/3 conferindo → "enviado, pode apagar".
+   O clipe e o `.srt` estão na Footage do Drive.
 5. Apague o clipe de teste do Drive e da pasta de saída.
 
-Se algo der errado, tire um print da tela do Estúdio **e** da janela do Terminal / janela preta.
+Na primeira transcrição o Whisper demora um pouco mais para começar (está carregando o modelo).
+No Windows sem placa de vídeo, a transcrição é mais lenta: uma aula de 1 hora pode levar de 30 a 60 minutos.
+
+Se algo der errado: print da tela do Estúdio + o arquivo **estudio.log**
+(Mac: `~/Library/Application Support/Estudio/` · Windows: `%APPDATA%\Estudio\`).
+
+---
+
+## Rodar sem o app empacotado (para quem programa)
+
+Com Python 3.10+: `Abrir Estudio.command` (Mac) ou `Abrir Estudio.bat` (Windows), na pasta do código.
+Para transcrever assim, precisa do `transcribe` do Mac em `/usr/local/bin` ou do Whisper instalado no Python.

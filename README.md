@@ -8,9 +8,9 @@ confere tudo numa tela; depois do envio, o app compara nome e tamanho no destino
 Parte C do superprojeto integrado. Segue o modelo do Montador e do Revisor: janela no navegador, Mac e
 Windows, sem administrador.
 
-> **Versão 1.0.1.** Instalação no Mac e no Windows: **[INSTALAR.md](INSTALAR.md)**. Ainda sem app empacotado:
-> roda com o Python do computador (`Abrir Estudio.command` no Mac, `Abrir Estudio.bat` no Windows).
-> Roteiros de teste antigos: [TESTE-FASE-1.md](TESTE-FASE-1.md), [TESTE-FASE-3.md](TESTE-FASE-3.md), [TESTE-AGENDA.md](TESTE-AGENDA.md).
+> **Baixar:** [Mac](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip) ·
+> [Windows](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-windows.zip).
+> O app já leva o Whisper (transcrição) e o ffmpeg. Como instalar: **[INSTALAR.md](INSTALAR.md)**.
 
 ## Como a equipe usa
 
@@ -72,6 +72,8 @@ Python 3.10+ só com a biblioteca padrão. Tela em HTML/CSS/JS puro servida pelo
 | Motor do Pastas do dia (agenda, criar pasta) | `estudio/pastas_do_dia.py` |
 | Vigia, registro, conferência e envio | `estudio/vigia.py` |
 | rclone, Subir no Drive e transcribe | `estudio/rclone.py` |
+| Transcrição (regras do transcribe; mlx no Mac, whisper.cpp no Windows) | `estudio/transcricao.py` |
+| App empacotado (PyInstaller) e montagem no GitHub | `packaging/`, `.github/workflows/montar.yml` |
 | Servidor e tela | `estudio/server.py`, `estudio/ui/` |
 | Simulação da Fase 1 | `estudio/simulador.py` |
 | Configurações por máquina | `estudio/appdata.py` |
