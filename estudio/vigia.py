@@ -20,11 +20,33 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import agenda as ag
-from . import appdata, mp4info
+from . import appdata, mp4info, rclone
 
 
 def _agora() -> datetime:
     return datetime.now()
+
+
+def aberto_por_outro(p: Path) -> bool:
+    """Mac/Linux: o arquivo ainda está aberto por algum programa (o OBS gravando)? Usa o lsof do sistema.
+
+    Segurança extra para o caso de o OBS ficar alguns segundos sem escrever no meio da gravação.
+    No Windows não precisa: lá o arquivo aberto pelo OBS não deixa ser movido (o app tenta de novo).
+    Sem lsof, responde False (fica só a regra dos segundos parado).
+    """
+    import os
+    import shutil as _sh
+    import subprocess
+    if os.name == "nt":
+        return False
+    exe = _sh.which("lsof") or ("/usr/sbin/lsof" if Path("/usr/sbin/lsof").is_file() else None)
+    if not exe:
+        return False
+    try:
+        r = subprocess.run([exe, "-t", "--", str(p)], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(r.stdout.strip())
 
 
 class Estudio:
@@ -144,6 +166,9 @@ class Estudio:
                                            "primeiro": v["primeiro"] if v else agora}
                     continue
                 if st.st_size > 0 and agora - v["mudou"] >= estavel:
+                    if aberto_por_outro(p):
+                        self.erros[p.name] = "O OBS ainda está com o arquivo aberto; espero ele fechar."
+                        continue
                     self._mover_do_obs(p, cfg)
             for nome in list(self.vistos):
                 if nome not in presentes:
@@ -263,72 +288,145 @@ class Estudio:
     # ------------------------------------------------------------------ envio
 
     def subir(self, pasta: str, dia: str) -> dict:
+        """"Conferido, pode subir": um botão só faz tudo, em segundo plano.
+
+        1. transcreve a pasta Footage com o `transcribe` (se estiver ligado e ainda não tiver os SRTs);
+        2. sobe a pasta inteira (vídeos + SRTs) — pelo rclone, com a conta do Subir no Drive, ou para uma pasta;
+        3. confere no destino o nome e o tamanho de cada arquivo → "enviado, pode apagar".
+        """
         cfg = appdata.carregar()
-        envio = cfg.get("pasta_envio")
-        if not envio or not Path(envio).is_dir():
-            raise ValueError("Configure a pasta de envio (na simulação, a pasta drive-falso).")
         if pasta in (ag.TESTES, ag.SEM_AGENDA):
             raise ValueError(f"\"{pasta}\" não sobe. Mova as gravações para o professor certo antes.")
+        modo = cfg.get("envio_modo") or "rclone"
+        if modo == "rclone":
+            if ":" not in rclone.destino(cfg):
+                raise ValueError("Não sei para onde subir. Em Configurações, preencha o destino no Drive.")
+            try:
+                rclone.achar(cfg)
+            except rclone.ErroRclone as e:
+                raise ValueError(str(e))
+        else:
+            envio = cfg.get("pasta_envio")
+            if not envio or not Path(envio).is_dir():
+                raise ValueError("Configure a pasta de envio (na simulação, a pasta drive-falso).")
         k = f"{pasta}|{dia}"
         with self.lock:
-            if self.envios.get(k, {}).get("estado") == "enviando":
+            if self.envios.get(k, {}).get("estado") in ("transcrevendo", "enviando", "conferindo"):
                 return self.envios[k]
             itens = [r for r in self.registro if r["pasta"] == pasta and r["dia"] == dia]
             if not itens:
                 raise ValueError("Nada para subir.")
+            faltam = [r["arquivo"] for r in itens if not Path(r["caminho"]).is_file()]
+            if faltam:
+                raise ValueError(f"Não achei {', '.join(faltam)} na pasta. Confira antes de subir.")
             for r in itens:
-                if r["estado"] != "enviado":
-                    r["estado"], r["msg"] = "conferido", "conferido, aguardando envio"
+                r["estado"], r["msg"] = "conferido", "conferido, na fila"
             self._salvar_registro()
-            self.envios[k] = {"estado": "enviando", "feito": 0, "total": sum(r["tamanho"] for r in itens), "msg": ""}
-        threading.Thread(target=self._enviar, args=(k, itens, Path(envio) / pasta / dia / "Footage"),
-                         daemon=True).start()
+            self.envios[k] = {"estado": "transcrevendo", "pct": 0, "msg": "começando…", "etapa": ""}
+        footage = self._footage(cfg, pasta, dia)
+        threading.Thread(target=self._processar, args=(k, itens, footage, pasta, dia, cfg), daemon=True).start()
         return self.envios[k]
 
-    def _enviar(self, k: str, itens: list[dict], destino: Path):
+    @staticmethod
+    def _precisa_transcrever(footage: Path) -> bool:
+        videos = [p for p in footage.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".mkv") and not p.name.startswith(".")]
+        for v in videos:
+            srt = v.with_suffix(".srt")
+            if not srt.is_file() or srt.stat().st_mtime < v.stat().st_mtime:
+                return True
+        if len(videos) >= 2 and not any(p.name.startswith("SRT unico") and p.suffix == ".srt" for p in footage.iterdir()):
+            return True
+        return False
+
+    def _processar(self, k: str, itens: list[dict], footage: Path, pasta: str, dia: str, cfg: dict):
         andamento = self.envios[k]
-        problemas = 0
+
+        def marcar(estado, msg):
+            with self.lock:
+                for r in itens:
+                    r["estado"], r["msg"] = estado, msg
+
         try:
-            destino.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            andamento.update(estado="erro", msg=f"Não consegui criar a pasta no destino: {e}")
-            return
-        for r in itens:
-            origem = Path(r["caminho"])
-            alvo = destino / origem.name
-            try:
-                if not origem.is_file():
-                    raise OSError("o arquivo não está mais na pasta")
-                if not (alvo.is_file() and alvo.stat().st_size == origem.stat().st_size):
-                    parcial = alvo.with_name(alvo.name + ".parcial")
-                    with open(origem, "rb") as fi, open(parcial, "wb") as fo:
-                        while True:
-                            bloco = fi.read(4 * 1024 * 1024)
-                            if not bloco:
-                                break
-                            fo.write(bloco)
-                            andamento["feito"] += len(bloco)
-                    parcial.replace(alvo)
+            # 1. transcrição
+            if cfg.get("transcrever", True):
+                exe_t = rclone.achar_transcribe(cfg)
+                if not exe_t:
+                    andamento["etapa"] = "Sem o transcribe neste computador: subindo sem transcrever."
+                elif self._precisa_transcrever(footage):
+                    andamento.update(estado="transcrevendo", msg="transcrevendo…")
+                    marcar("conferido", "transcrevendo…")
+                    rclone.transcrever(exe_t, footage, lambda ln: andamento.update(msg=ln[:160]))
                 else:
-                    andamento["feito"] += r["tamanho"]
-                # conferência: nome e tamanho iguais nos dois lados
-                ok = alvo.is_file() and alvo.name == origem.name and alvo.stat().st_size == origem.stat().st_size
-                with self.lock:
-                    if ok:
-                        r["estado"], r["msg"] = "enviado", "enviado, pode apagar"
-                        r["enviado_para"] = str(alvo)
+                    andamento["etapa"] = "Já estava transcrito."
+            # 2. envio
+            andamento.update(estado="enviando", pct=0, msg="subindo…")
+            marcar("conferido", "subindo…")
+            locais = {p.name: p.stat().st_size for p in footage.iterdir()
+                      if p.is_file() and not p.name.startswith(".") and not p.name.endswith(".parcial")}
+            if (cfg.get("envio_modo") or "rclone") == "rclone":
+                exe = rclone.achar(cfg)
+                remoto = rclone.juntar(rclone.destino(cfg), pasta, dia, "Footage")
+                rclone.enviar_pasta(exe, footage, remoto, lambda pct: andamento.update(pct=pct))
+                andamento.update(estado="conferindo", msg="conferindo no Drive…")
+                no_destino = rclone.listar(exe, remoto)
+                onde = remoto
+            else:
+                destino = Path(cfg["pasta_envio"]) / pasta / dia / "Footage"
+                self._copiar_pasta(footage, destino, locais, andamento)
+                andamento.update(estado="conferindo", msg="conferindo…")
+                no_destino = {p.name: p.stat().st_size for p in destino.iterdir() if p.is_file()}
+                onde = str(destino)
+            # 3. conferência: nome e tamanho de cada arquivo da pasta (vídeos e SRTs)
+            problemas = [n for n, t in locais.items() if no_destino.get(n) != t]
+            with self.lock:
+                for r in itens:
+                    nome = Path(r["caminho"]).name
+                    if nome in problemas:
+                        r["estado"] = "erro"
+                        r["msg"] = "não está no destino — não apague" if nome not in no_destino \
+                            else "tamanho diferente no destino — não apague"
                     else:
-                        r["estado"], r["msg"] = "erro", "tamanho diferente no destino — não apague"
-                        problemas += 1
-            except OSError as e:
-                with self.lock:
-                    r["estado"], r["msg"] = "erro", f"não subiu: {e}"
-                problemas += 1
-        with self.lock:
-            self._salvar_registro()
-            andamento["estado"] = "ok" if not problemas else "erro"
-            andamento["msg"] = ("Tudo conferido no destino: mesmo nome e mesmo tamanho." if not problemas
-                                else f"{problemas} arquivo(s) com problema. Não apague estes.")
+                        r["estado"], r["msg"] = "enviado", "enviado, pode apagar"
+                        r["enviado_para"] = f"{onde}/{nome}"
+                n_srt = sum(1 for n in locais if n.endswith((".srt", ".txt")))
+                if problemas:
+                    andamento.update(estado="erro", msg=f"{len(problemas)} arquivo(s) não conferem: "
+                                     f"{', '.join(problemas[:3])}. Não apague. Clique de novo para tentar.")
+                else:
+                    extra = f" e {n_srt} arquivo(s) de transcrição" if n_srt else ""
+                    andamento.update(estado="ok", pct=100,
+                                     msg=f"Tudo conferido no destino: {len(locais) - n_srt} vídeo(s){extra}, "
+                                         "mesmo nome e mesmo tamanho.")
+                self._salvar_registro()
+        except (rclone.ErroRclone, OSError) as e:
+            with self.lock:
+                for r in itens:
+                    if r["estado"] != "enviado":
+                        r["estado"], r["msg"] = "erro", "não subiu — veja o aviso do grupo"
+                andamento.update(estado="erro", msg=f"Parou: {e}. Nada foi apagado. Clique de novo para tentar.")
+                self._salvar_registro()
+
+    @staticmethod
+    def _copiar_pasta(origem: Path, destino: Path, locais: dict, andamento: dict):
+        destino.mkdir(parents=True, exist_ok=True)
+        total = sum(locais.values()) or 1
+        feito = 0
+        for nome, tam in locais.items():
+            alvo = destino / nome
+            if not (alvo.is_file() and alvo.stat().st_size == tam):
+                parcial = alvo.with_name(nome + ".parcial")
+                with open(origem / nome, "rb") as fi, open(parcial, "wb") as fo:
+                    while True:
+                        bloco = fi.read(4 * 1024 * 1024)
+                        if not bloco:
+                            break
+                        fo.write(bloco)
+                        feito += len(bloco)
+                        andamento["pct"] = int(100 * feito / total)
+                parcial.replace(alvo)
+            else:
+                feito += tam
+                andamento["pct"] = int(100 * feito / total)
 
     # ------------------------------------------------------------------ o que a tela mostra
 

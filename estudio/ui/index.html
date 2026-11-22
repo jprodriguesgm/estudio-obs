@@ -49,7 +49,14 @@
     <div class="cfg" data-campo="pasta_obs" data-tipo="pasta"><label>Pasta onde o OBS grava</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
     <div class="cfg" data-campo="pasta_saida" data-tipo="pasta"><label>Pasta de saída (onde nascem as pastas dos professores)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
     <div class="cfg" data-campo="agenda" data-tipo="arquivo"><label>Arquivo da agenda do dia (.json)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
-    <div class="cfg" data-campo="pasta_envio" data-tipo="pasta"><label>Pasta de envio (Drive para computador; na simulação, drive-falso)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
+    <div class="cfg" data-campo="envio_modo" data-tipo="escolha"><label>Como subir</label><div class="linha"><select class="campo">
+      <option value="rclone">Pelo rclone, com a conta do Subir no Drive (uso normal)</option>
+      <option value="pasta">Copiar para uma pasta (simulação: drive-falso)</option></select></div></div>
+    <div class="cfg so-rclone" data-campo="rclone_destino" data-tipo="texto"><label>Pasta no Drive (conexão:pasta). Vazio = a do Subir no Drive</label><div class="linha"><input class="campo mono" id="destino-input"><button class="btn pequeno" id="testar">Testar conexão</button></div>
+      <div class="dica" id="destino-dica"></div></div>
+    <div class="cfg so-pasta" data-campo="pasta_envio" data-tipo="pasta"><label>Pasta de envio</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
+    <div class="cfg" data-campo="transcrever" data-tipo="caixa"><label class="marcar"><input type="checkbox"> Transcrever antes de subir (transcribe do Mac: um SRT por vídeo + SRT único do dia)</label>
+      <div class="dica" id="transcribe-dica"></div></div>
     <div class="linha">
       <div class="cfg" data-campo="estavel_seg" data-tipo="numero"><label>Segundos parado = gravação terminou</label><div class="linha"><input class="campo" type="number" min="1" style="width:90px"></div></div>
       <div class="cfg" data-campo="antecedencia_min" data-tipo="numero"><label>Minutos antes do horário que já contam</label><div class="linha"><input class="campo" type="number" min="1" style="width:90px"></div></div>

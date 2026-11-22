@@ -167,3 +167,61 @@ def test_mesmo_nome_nao_sobrescreve(app):
     _gravar_e_parar(est, cfg, "08-15-00", t + 10)
     nomes = sorted(r["arquivo"] for r in est.registro)
     assert nomes[0].endswith("08-15-00 (2).mp4") and nomes[1].endswith("08-15-00.mp4")
+
+
+# ------------------------------------------------------------------ um botão só: transcreve, sobe pelo rclone e confere
+
+FALSOS = Path(__file__).parent / "falsos"
+
+
+def _esperar(est, k):
+    for _ in range(100):
+        if est.envios[k]["estado"] not in ("transcrevendo", "enviando", "conferindo"):
+            return est.envios[k]
+        time.sleep(0.1)
+    raise AssertionError("o envio não terminou")
+
+
+def test_botao_unico_transcreve_sobe_e_confere(app, tmp_path, monkeypatch):
+    from estudio import appdata, rclone
+    snd = tmp_path / "SubirNoDrive"
+    snd.mkdir()
+    (snd / "config.txt").write_text("drive\nGravações IEC\niec@pucminas.br\n", encoding="utf-8")
+    (snd / "env.sh").write_text(f'export PATH="{FALSOS}:$PATH"\n', encoding="utf-8")
+    monkeypatch.setenv("SUBIR_NO_DRIVE_HOME", str(snd))
+    monkeypatch.setenv("FAKE_DRIVE", str(tmp_path / "drive"))
+    appdata.salvar({"envio_modo": "rclone", "transcrever": True, "transcribe_exe": str(FALSOS / "transcribe")})
+    assert rclone.destino(appdata.carregar()) == "drive:Gravações IEC"
+    assert "iec@pucminas.br" in rclone.testar(appdata.carregar())
+    est, cfg = app["est"], appdata.carregar()
+    t = time.time()
+    _gravar_e_parar(est, cfg, "08-15-00", t)
+    _gravar_e_parar(est, cfg, "08-40-00", t + 10)
+    dia = est.registro[0]["dia"]
+    est.subir("26_101 Ana Souza", dia)
+    env = _esperar(est, f"26_101 Ana Souza|{dia}")
+    assert env["estado"] == "ok", env
+    assert "2 arquivo(s) de transcrição" not in env["msg"] and "transcrição" in env["msg"]
+    no_drive = tmp_path / "drive" / "Gravações IEC" / "26_101 Ana Souza" / dia / "Footage"
+    nomes = sorted(p.name for p in no_drive.iterdir())
+    assert any(n.endswith("08-15-00.srt") for n in nomes) and "SRT unico - Footage.srt" in nomes
+    assert len([n for n in nomes if n.endswith(".mp4")]) == 2
+    assert all(r["estado"] == "enviado" for r in est.registro)
+    # segunda vez: já transcrito, não roda o transcribe de novo
+    assert not est._precisa_transcrever(Path(est.registro[0]["caminho"]).parent)
+
+
+def test_erro_do_rclone_nao_marca_como_enviado(app, tmp_path, monkeypatch):
+    from estudio import appdata
+    monkeypatch.setenv("SUBIR_NO_DRIVE_HOME", str(tmp_path / "nada"))
+    monkeypatch.setenv("FAKE_DRIVE", str(tmp_path / "drive"))
+    monkeypatch.setenv("PATH", f"{FALSOS}:" + os.environ["PATH"])
+    appdata.salvar({"envio_modo": "rclone", "rclone_destino": "outra:Pasta", "transcrever": False})
+    est, cfg = app["est"], appdata.carregar()
+    _gravar_e_parar(est, cfg, "08-15-00", time.time())
+    dia = est.registro[0]["dia"]
+    est.subir("26_101 Ana Souza", dia)
+    env = _esperar(est, f"26_101 Ana Souza|{dia}")
+    assert env["estado"] == "erro" and "não existe" in env["msg"]
+    assert est.registro[0]["estado"] == "erro"
+    assert Path(est.registro[0]["caminho"]).is_file()

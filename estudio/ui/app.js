@@ -121,13 +121,19 @@ function desenharGrupos(e) {
     const durTotal = g.itens.reduce((s, i) => s + (i.duracao || 0), 0);
     let acao = "";
     const env = g.envio;
+    const ocupado = env && ["transcrevendo", "enviando", "conferindo"].includes(env.estado);
     if (especial) acao = `<span class="dica">não sobe — mova para o professor certo</span>`;
-    else if (env && env.estado === "enviando") {
-      const pct = env.total ? Math.round(100 * env.feito / env.total) : 0;
-      acao = `<span class="dica">enviando… ${pct}%</span><div class="progresso"><i style="width:${pct}%"></i></div>`;
+    else if (ocupado) {
+      const nomes = {transcrevendo: "1/3 transcrevendo…", enviando: `2/3 subindo… ${env.pct || 0}%`, conferindo: "3/3 conferindo…"};
+      const pct = env.estado === "transcrevendo" ? 5 : env.estado === "conferindo" ? 100 : (env.pct || 0);
+      acao = `<div class="andamento"><span class="dica">${nomes[env.estado]}</span><div class="progresso"><i style="width:${pct}%"></i></div></div>`;
     } else if (g.enviado) acao = `<span class="estado enviado">✓ enviado, pode apagar</span>`;
-    else acao = `<button class="btn principal pequeno" data-subir="${esc(g.pasta)}" data-dia="${esc(g.dia)}">Conferido, pode subir</button>`;
-    if (env && env.msg && env.estado !== "enviando") acao = `<span class="dica">${esc(env.msg)}</span>` + acao;
+    else acao = `<button class="btn principal pequeno" data-subir="${esc(g.pasta)}" data-dia="${esc(g.dia)}" title="Transcreve, sobe e confere no Drive">${env && env.estado === "erro" ? "Tentar de novo" : "Conferido, pode subir"}</button>`;
+    let rodape = "";
+    if (env && env.msg && env.estado !== "enviando") {
+      const cls = env.estado === "ok" ? "ok" : env.estado === "erro" ? "erro" : "info";
+      rodape = `<div class="grupo-msg ${cls}">${esc(env.msg)}${env.etapa ? " · " + esc(env.etapa) : ""}</div>`;
+    }
 
     const itens = g.itens.map((i) => {
       const opcoes = e.opcoes.filter((o) => o !== g.pasta)
@@ -148,7 +154,7 @@ function desenharGrupos(e) {
     return `<div class="grupo ${especial ? "especial" : ""}">
       <div class="grupo-topo"><span class="nome">${esc(g.pasta)}</span>
         <span class="info">${dataBR(g.data)} · ${g.itens.length} gravação(ões) · ${duracao(durTotal)}</span>
-        <span class="acao">${acao}</span></div>${itens}</div>`;
+        <span class="acao">${acao}</span></div>${rodape}${itens}</div>`;
   }).join("");
 }
 
@@ -188,9 +194,43 @@ $("#grupos").addEventListener("click", async (ev) => {
 });
 
 // configurações
+function campoDe(c) { return c.querySelector("select") || c.querySelector("input"); }
 function preencherConfig() {
-  document.querySelectorAll(".cfg").forEach((c) => { c.querySelector("input").value = estado.config[c.dataset.campo] ?? ""; });
+  document.querySelectorAll(".cfg").forEach((c) => {
+    const el = campoDe(c), v = estado.config[c.dataset.campo];
+    if (c.dataset.tipo === "caixa") el.checked = !!v; else el.value = v ?? "";
+  });
+  const en = estado.envio;
+  $("#destino-input").placeholder = en.destino_padrao || "ex.: drive:Gravações IEC/Teste Estúdio";
+  const snd = en.subir_no_drive;
+  $("#destino-dica").textContent = snd
+    ? `Subir no Drive encontrado: conexão "${snd.remoto}", pasta "${snd.raiz || "(raiz)"}"${snd.email ? ", conta " + snd.email : ""}. Cada professor vira uma pasta dentro do destino: <destino>/26_xxx Professor/AAAA MM DD/Footage.`
+    : "Não achei o Subir no Drive neste computador. Preencha o destino (conexão do rclone:pasta).";
+  $("#transcribe-dica").textContent = en.transcribe ? "transcribe encontrado: " + en.transcribe : "Não achei o transcribe neste computador: as gravações sobem sem transcrição.";
+  visibilidadeEnvio();
 }
+function visibilidadeEnvio() {
+  const modo = document.querySelector('.cfg[data-campo="envio_modo"] select').value;
+  document.querySelectorAll(".so-rclone").forEach((x) => x.classList.toggle("hidden", modo !== "rclone"));
+  document.querySelectorAll(".so-pasta").forEach((x) => x.classList.toggle("hidden", modo !== "pasta"));
+}
+document.querySelector('.cfg[data-campo="envio_modo"] select').onchange = visibilidadeEnvio;
+function lerConfig() {
+  const mudancas = {};
+  document.querySelectorAll(".cfg").forEach((c) => {
+    const el = campoDe(c);
+    if (c.dataset.tipo === "caixa") mudancas[c.dataset.campo] = el.checked;
+    else if (c.dataset.tipo === "numero") mudancas[c.dataset.campo] = Number(el.value);
+    else if (c.dataset.campo === "rclone_destino") mudancas[c.dataset.campo] = el.value.trim();
+    else mudancas[c.dataset.campo] = el.value.trim() || null;
+  });
+  return mudancas;
+}
+$("#testar").onclick = async () => {
+  const d = $("#destino-dica"); d.className = "dica"; d.textContent = "Testando…";
+  try { const r = await api("/api/testar", {mudancas: lerConfig()}); d.className = "dica ok"; d.textContent = "✓ " + r.msg; }
+  catch (x) { d.className = "dica ruim"; d.textContent = "✗ " + x.message; }
+};
 $("#abrir-config").onclick = () => {
   configAberta = !configAberta;
   $("#config").classList.toggle("hidden", !configAberta);
@@ -205,11 +245,7 @@ document.querySelectorAll(".cfg .escolher").forEach((b) => b.onclick = async () 
   } catch (x) { erro(x.message); }
 });
 $("#salvar-config").onclick = async () => {
-  const mudancas = {};
-  document.querySelectorAll(".cfg").forEach((c) => {
-    const v = c.querySelector("input").value.trim();
-    mudancas[c.dataset.campo] = c.dataset.tipo === "numero" ? Number(v) : (v || null);
-  });
+  const mudancas = lerConfig();
   try { estado = await api("/api/config", {mudancas}); desenhar(); configAberta = false; $("#config").classList.add("hidden"); }
   catch (x) { erro(x.message); }
 };

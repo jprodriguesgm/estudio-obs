@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""rclone de mentira para os testes: a conexão "drive:" é a pasta $FAKE_DRIVE."""
+import json, os, shutil, sys
+from pathlib import Path
+raiz = Path(os.environ["FAKE_DRIVE"])
+def local(r):
+    rem, _, cam = r.partition(":")
+    if rem != "drive":
+        print(f"ERROR : didn't find section in config file ({rem})", file=sys.stderr); sys.exit(1)
+    return raiz / cam
+a = sys.argv[1:]
+if a[0] == "listremotes": print("drive:")
+elif a[0] == "config": print("email: iec@pucminas.br")
+elif a[0] == "mkdir": local(a[1]).mkdir(parents=True, exist_ok=True)
+elif a[0] == "lsjson":
+    p = local(a[-1])
+    print(json.dumps([{"Name": f.name, "Size": f.stat().st_size} for f in p.iterdir() if f.is_file()] if p.is_dir() else []))
+elif a[0] == "copy":
+    src, dst = Path(a[1]), local(a[2]); dst.mkdir(parents=True, exist_ok=True)
+    for f in src.iterdir():
+        if f.is_file() and not f.name.startswith("."):
+            shutil.copy2(f, dst / f.name)
+    print("Transferred:   	    1 MiB / 2 MiB, 50%, 1 MiB/s, ETA 1s", file=sys.stderr)
+    print("Transferred:   	    2 MiB / 2 MiB, 100%, 1 MiB/s, ETA 0s", file=sys.stderr)

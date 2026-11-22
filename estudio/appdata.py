@@ -20,7 +20,12 @@ DEFAULTS = {
     "pasta_obs": None,        # onde o OBS grava (o app vigia esta pasta)
     "pasta_saida": None,      # onde nascem as pastas "26_xxx Professor/AAAA MM DD/Footage"
     "agenda": None,           # arquivo da agenda do dia (.json)
-    "pasta_envio": None,      # para onde "Conferido, pode subir" copia (Drive para computador; na simulação, drive-falso)
+    "envio_modo": "rclone",   # "rclone" (conta do Subir no Drive) ou "pasta" (copia para uma pasta; a simulação usa)
+    "pasta_envio": None,      # modo pasta: para onde "Conferido, pode subir" copia (na simulação, drive-falso)
+    "rclone_destino": "",     # modo rclone: conexão e pasta, ex.: "drive:Gravações IEC". Vazio = a do Subir no Drive
+    "rclone_exe": "",         # caminho do rclone, se não estiver nos lugares de sempre
+    "transcrever": True,      # rodar o `transcribe` antes de subir (Mac com chip Apple)
+    "transcribe_exe": "",     # caminho do transcribe, se não estiver em /usr/local/bin
     "estavel_seg": 5,         # segundos sem crescer para considerar a gravação terminada
     "antecedencia_min": 30,   # gravação até X min antes do evento já é daquele professor
     "nome_maquina": "",       # ex.: "Estúdio 1 — São Gabriel" (aparece no topo)
@@ -65,6 +70,8 @@ def salvar(mudancas: dict) -> dict:
     for k, v in mudancas.items():
         if k not in DEFAULTS:
             continue
+        if k == "transcrever":
+            v = bool(v)
         if k in ("estavel_seg", "antecedencia_min"):
             try:
                 v = max(1, int(v))

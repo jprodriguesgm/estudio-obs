@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, appdata, dialogs
+from . import __version__, appdata, dialogs, rclone
 from .vigia import ESTUDIO
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
@@ -34,7 +34,20 @@ ULTIMO_PING = [time.time()]
 
 def acao_estado(_q=None) -> dict:
     cfg = appdata.carregar()
-    return {"versao": __version__, "config": cfg, **ESTUDIO.resumo()}
+    snd = rclone.subir_no_drive()
+    envio = {"subir_no_drive": {"remoto": snd["remoto"], "raiz": snd["raiz"], "email": snd["email"]} if snd else None,
+             "destino_padrao": rclone.destino_padrao(), "destino": rclone.destino(cfg),
+             "transcribe": rclone.achar_transcribe(cfg)}
+    return {"versao": __version__, "config": cfg, "envio": envio, **ESTUDIO.resumo()}
+
+
+def acao_testar(corpo) -> dict:
+    if corpo.get("mudancas"):
+        appdata.salvar(corpo["mudancas"])
+    try:
+        return {"msg": rclone.testar(appdata.carregar())}
+    except rclone.ErroRclone as e:
+        raise ApiError(str(e))
 
 
 def acao_config(corpo) -> dict:
@@ -103,7 +116,7 @@ def acao_mostrar(corpo) -> dict:
 GET = {"/api/estado": acao_estado}
 POST = {"/api/config": acao_config, "/api/escolher": acao_escolher, "/api/trocar": acao_trocar,
         "/api/mover": acao_mover, "/api/subir": acao_subir, "/api/esquecer": acao_esquecer,
-        "/api/mostrar": acao_mostrar}
+        "/api/mostrar": acao_mostrar, "/api/testar": acao_testar}
 
 
 # ====================================================================== HTTP
