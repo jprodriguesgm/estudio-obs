@@ -263,8 +263,10 @@ jobs:
           echo "### Windows" > diag-windows.txt
           cat whisper/VERSAO.txt >> diag-windows.txt
           set +e
-          "dist/Estudio/estudio-terminal.exe" diagnostico "build/2026-01-01 10-00-00.mov" > d.txt 2>&1
+          ls dist/Estudio/_internal/whisper 2>&1 | tr '\n' ' ' >> diag-windows.txt; echo >> diag-windows.txt
+          PYTHONIOENCODING=utf-8 "dist/Estudio/estudio-terminal.exe" diagnostico "build/2026-01-01 10-00-00.mov" > d.txt 2>&1
           rc=$?
+          echo "(saída $rc)" >> d.txt
           cat d.txt | tee -a diag-windows.txt
           du -sh "dist/Estudio" | tee -a diag-windows.txt
           echo "::notice title=Diagnóstico Windows::$(tr '\n' '|' < diag-windows.txt)"

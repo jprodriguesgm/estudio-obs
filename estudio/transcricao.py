@@ -36,7 +36,10 @@ LIMITE_DURO = 40.0     # nunca deixa uma legenda passar disso
 
 
 def _p(*a):
-    print(*a, flush=True)
+    try:
+        print(*a, flush=True)
+    except UnicodeEncodeError:
+        print(*(str(x).encode("ascii", "replace").decode() for x in a), flush=True)
 
 
 # ====================================================================== onde estão as coisas

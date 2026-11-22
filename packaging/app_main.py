@@ -31,7 +31,26 @@ def _log_em_arquivo():
         pass
 
 
+def _saida_utf8():
+    """Windows: a janela de texto usa outra codificação; acento e "·" não podem derrubar o app."""
+    for f in (sys.stdout, sys.stderr):
+        try:
+            f.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def diagnostico(video: str | None = None) -> int:
+    try:
+        return _diagnostico(video)
+    except BaseException:  # noqa: BLE001 — no diagnóstico, qualquer erro tem que aparecer por escrito
+        import traceback
+        traceback.print_exc(file=sys.stdout)
+        sys.stdout.flush()
+        return 1
+
+
+def _diagnostico(video: str | None = None) -> int:
     """Confere o que vai dentro do app e, com um vídeo, transcreve de verdade."""
     import platform
     import shutil
@@ -51,6 +70,12 @@ def diagnostico(video: str | None = None) -> int:
         print(f"{'modelo':<10} {transcricao.modelo_mlx()}", flush=True)
     else:
         print(f"{'modelo':<10} {transcricao.modelo_cpp()}  · {transcricao.whisper_cli()}", flush=True)
+        cli = transcricao.whisper_cli()
+        if cli:
+            import subprocess
+            r = subprocess.run([cli, "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(f"{'whisper-cli':<10} saída {r.returncode}: {(r.stdout + r.stderr).strip().splitlines()[:1]}",
+                  flush=True)
     from estudio import ui_ok
     print(f"{'tela':<10} {'ok' if ui_ok() else 'FALTA'}", flush=True)
     ok &= ui_ok()
@@ -73,7 +98,8 @@ def diagnostico(video: str | None = None) -> int:
 
 def main() -> int:
     import multiprocessing
-    multiprocessing.freeze_support()     # bibliotecas do Whisper abrem processos auxiliares; no app empacotado precisa disto
+    multiprocessing.freeze_support()
+    _saida_utf8()     # bibliotecas do Whisper abrem processos auxiliares; no app empacotado precisa disto
     args = [a for a in sys.argv[1:] if not a.startswith("-psn_")]   # o Finder antigo manda "-psn_…"
     if args and args[0] == "diagnostico":
         return diagnostico(args[1] if len(args) > 1 else None)
