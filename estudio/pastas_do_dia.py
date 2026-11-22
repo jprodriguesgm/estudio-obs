@@ -80,3 +80,9 @@ def escolha_padrao(candidatos: list[dict]) -> int:
             if c.get("pasta") and c.get("nota") == nota:
                 return i
     return 0
+
+
+def id_da_url(url: str) -> str | None:
+    """Id da pasta num link do Drive (…/folders/<id>…)."""
+    m = re.search(r"/folders/([A-Za-z0-9_-]{10,})", url or "") or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", url or "")
+    return m.group(1) if m else None

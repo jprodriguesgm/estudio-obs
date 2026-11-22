@@ -205,7 +205,7 @@ function htmlGrupo(e, g) {
     const nomes = {transcrevendo: "1/3 transcrevendo…", enviando: `2/3 subindo… ${env.pct || 0}%`, conferindo: "3/3 conferindo…"};
     const pct = env.estado === "transcrevendo" ? 5 : env.estado === "conferindo" ? 100 : (env.pct || 0);
     acao = `<div class="andamento"><span class="dica">${nomes[env.estado]}</span><div class="progresso"><i style="width:${pct}%"></i></div></div>`;
-  } else if (g.enviado) acao = `<span class="estado enviado">✓ enviado, pode apagar</span>`;
+  } else if (g.enviado) acao = `<span class="estado enviado">✓ enviado, pode apagar</span><button class="btn pequeno" data-subir="${esc(g.pasta)}" data-dia="${esc(g.dia)}" title="Sobe de novo (o que já está igual no Drive não sobe outra vez)">Subir de novo</button>`;
   else acao = `<button class="btn principal pequeno" data-subir="${esc(g.pasta)}" data-dia="${esc(g.dia)}" title="Transcreve, sobe e confere no Drive">${env && env.estado === "erro" ? "Tentar de novo" : "Conferido, pode subir"}</button>`;
   let rodape = "";
   if (env && env.msg && env.estado !== "enviando") {

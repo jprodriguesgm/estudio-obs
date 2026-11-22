@@ -59,6 +59,7 @@ class Estudio:
         self.pd: dict = self._carregar_cache_pd()  # agenda do Pastas do dia: {"data", "dados", "quando", "erro", "carregando"}
         self.escolhas_codigo: dict[str, int] = {}  # id do evento → índice do código escolhido
         self.pasta_dia_urls: dict[str, str] = {}   # id do evento → link da pasta do dia no Drive (depois de criar)
+        self.pastas_drive: dict[str, str] = self._carregar_pastas_drive()  # "pasta|dia" → id da pasta do dia no Drive
         self.sessao: str | None = None            # id do evento aberto na tela do professor
         self.dia_agenda: date | None = None       # dia mostrado na agenda (None = hoje); serve para testar outro dia
         self.registro: list[dict] = self._carregar_registro()
@@ -82,6 +83,28 @@ class Estudio:
         tmp = self._arq_registro().with_suffix(".tmp")
         tmp.write_text(json.dumps(self.registro, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(self._arq_registro())
+
+    @staticmethod
+    def _arq_pastas_drive() -> Path:
+        return appdata.home() / "pastas-drive.json"
+
+    def _carregar_pastas_drive(self) -> dict:
+        try:
+            return json.loads(self._arq_pastas_drive().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def lembrar_pasta_drive(self, pasta: str, dia: str, url: str):
+        """Guarda o id da pasta do dia que o Pastas do dia criou: o envio vai direto para ela, sem depender de nome."""
+        fid = pastas_do_dia.id_da_url(url)
+        if not fid:
+            return
+        self.pastas_drive[f"{pasta}|{dia}"] = fid
+        try:
+            self._arq_pastas_drive().write_text(json.dumps(self.pastas_drive, ensure_ascii=False, indent=1),
+                                                encoding="utf-8")
+        except OSError:
+            pass
 
     def _entrada(self, id_: str) -> dict:
         for r in self.registro:
@@ -164,6 +187,8 @@ class Estudio:
             for e in a.eventos:
                 if e.id in self.pasta_dia_urls:
                     e.pasta_dia_url = self.pasta_dia_urls[e.id]
+                if e.pasta_dia_url and f"{e.pasta}|{ag.pasta_dia(hoje)}" not in self.pastas_drive:
+                    self.lembrar_pasta_drive(e.pasta, ag.pasta_dia(hoje), e.pasta_dia_url)
             hora = datetime.fromtimestamp(pd["quando"]).strftime("%H:%M") if pd.get("quando") else ""
             a.info = (f"sem conexão com o Pastas do dia ({pd['erro']}); usando a cópia das {hora}" if pd.get("erro")
                       else f"Pastas do dia · atualizada às {hora}")
@@ -202,6 +227,7 @@ class Estudio:
                 r = pastas_do_dia.criar(url, e.pasta_id, a.data.isoformat())
                 if r.get("url"):
                     self.pasta_dia_urls[evento_id] = r["url"]
+                    self.lembrar_pasta_drive(e.pasta, dia, r["url"])
             except pastas_do_dia.ErroPastas as erro:
                 avisos.append(f"não consegui criar a pasta no Drive ({erro}); o envio cria na hora de subir")
         elif url:
@@ -497,9 +523,17 @@ class Estudio:
             marcar("conferido", "subindo…")
             locais = {p.name: p.stat().st_size for p in footage.iterdir()
                       if p.is_file() and not p.name.startswith(".") and not p.name.endswith(".parcial")}
+            fid = None
             if (cfg.get("envio_modo") or "rclone") == "rclone":
                 exe = rclone.achar(cfg)
-                remoto = rclone.juntar(rclone.destino(cfg), pasta, dia, "Footage")
+                fid = self.pastas_drive.get(f"{pasta}|{dia}")
+                if fid:      # a pasta do dia criada pelo Pastas do dia: sobe direto nela, pelo id
+                    conexao = rclone.destino(cfg).split(":", 1)[0] or "drive"
+                    remoto = f"{conexao},root_folder_id={fid}:Footage"
+                    andamento["etapa"] = "direto na pasta do dia criada pelo Pastas do dia"
+                else:
+                    remoto = rclone.juntar(rclone.destino(cfg), pasta, dia, "Footage")
+                    andamento["etapa"] = f"em {remoto}"
                 rclone.enviar_pasta(exe, footage, remoto, lambda pct: andamento.update(pct=pct))
                 andamento.update(estado="conferindo", msg="conferindo no Drive…")
                 no_destino = rclone.listar(exe, remoto)
@@ -522,6 +556,8 @@ class Estudio:
                     else:
                         r["estado"], r["msg"] = "enviado", "enviado, pode apagar"
                         r["enviado_para"] = f"{onde}/{nome}"
+                        r["envio_link"] = (f"https://drive.google.com/drive/folders/{fid}"
+                                           if (cfg.get("envio_modo") or "rclone") == "rclone" and fid else "")
                 n_srt = sum(1 for n in locais if n.endswith((".srt", ".txt")))
                 if problemas:
                     andamento.update(estado="erro", msg=f"{len(problemas)} arquivo(s) não conferem: "

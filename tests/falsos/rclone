@@ -5,6 +5,8 @@ from pathlib import Path
 raiz = Path(os.environ["FAKE_DRIVE"])
 def local(r):
     rem, _, cam = r.partition(":")
+    if rem.startswith("drive,root_folder_id="):
+        return raiz / ("_id_" + rem.split("=", 1)[1]) / cam
     if rem != "drive":
         print(f"ERROR : didn't find section in config file ({rem})", file=sys.stderr); sys.exit(1)
     return raiz / cam

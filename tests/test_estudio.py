@@ -320,3 +320,26 @@ def test_agenda_de_outro_dia(app, pd, monkeypatch):
     assert (Path(cfg["pasta_saida"]) / r["pasta"] / dia / "Footage" / r["arquivo"]).is_file()
     est.mudar_dia(None)
     assert est.dia_agenda is None
+
+
+def test_sobe_direto_na_pasta_do_dia_criada(app, pd, tmp_path, monkeypatch):
+    """Mesmo com o destino errado nas Configurações, vai para a pasta do dia que o Pastas do dia criou."""
+    from estudio import appdata, pastas_do_dia, vigia
+    monkeypatch.setenv("SUBIR_NO_DRIVE_HOME", str(tmp_path / "nada"))
+    monkeypatch.setenv("FAKE_DRIVE", str(tmp_path / "drive"))
+    monkeypatch.setenv("PATH", f"{FALSOS}:" + os.environ["PATH"])
+    monkeypatch.setattr(pastas_do_dia, "_chamar", lambda url, p, tempo=90: (
+        _dados_pd() if p["acao"] == "carregar" else
+        {"url": "https://drive.google.com/drive/folders/1ABCdefGHIjklMNOpqr"} if p["acao"] == "criar" else {}))
+    appdata.salvar({"envio_modo": "rclone", "rclone_destino": "drive:Gravações IEC/26_999 Teste", "transcrever": False})
+    est, cfg = app["est"], appdata.carregar()
+    monkeypatch.setattr(vigia, "_agora", lambda: _hoje(8, 20))
+    est.selecionar("a1")
+    _gravar_e_parar(est, cfg, "08-21-00", time.time())
+    r = est.registro[-1]
+    est.subir(r["pasta"], r["dia"])
+    env = _esperar(est, f"{r['pasta']}|{r['dia']}")
+    assert env["estado"] == "ok", env
+    assert (tmp_path / "drive" / "_id_1ABCdefGHIjklMNOpqr" / "Footage" / r["arquivo"]).is_file()
+    assert not (tmp_path / "drive" / "Gravações IEC").exists()
+    assert vigia.Estudio().pastas_drive[f"{r['pasta']}|{r['dia']}"] == "1ABCdefGHIjklMNOpqr"
