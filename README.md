@@ -8,8 +8,19 @@ confere tudo numa tela; depois do envio, o app compara nome e tamanho no destino
 Parte C do superprojeto integrado. Segue o modelo do Montador e do Revisor: janela no navegador, Mac e
 Windows, sem administrador.
 
-> **Versão 0.2.0 — testes por fases.** Ainda sem empacotamento pelo GitHub Actions: roda com o `python3`
-> do Mac. Roteiros: [TESTE-FASE-1.md](TESTE-FASE-1.md) (simulação) e [TESTE-FASE-3.md](TESTE-FASE-3.md) (Drive).
+> **Versão 0.3.0 — testes por fases.** Ainda sem empacotamento pelo GitHub Actions: roda com o `python3`
+> do Mac. Roteiros: [TESTE-FASE-1.md](TESTE-FASE-1.md) (simulação), [TESTE-FASE-3.md](TESTE-FASE-3.md) (Drive) e
+> [TESTE-AGENDA.md](TESTE-AGENDA.md) (fluxo pela agenda do Pastas do dia).
+
+## Como a equipe usa
+
+1. O app abre na **agenda de hoje**, que vem do **Pastas do dia** (agenda producao.eadiec + códigos da planilha).
+   O professor do horário já vem marcado.
+2. **Gravar com este professor**: cria a pasta do dia no Drive (pelo motor do Pastas do dia) e a mesma pasta no
+   computador, e manda as próximas gravações para ele.
+3. Grava no OBS normalmente. Ao parar, o vídeo vai para `26_xxx Professor/AAAA MM DD/Footage`.
+4. **Conferido, pode subir**: transcreve, sobe pelo rclone e confere no Drive.
+5. **← Voltar para a agenda** e o próximo professor.
 
 ## O que ele faz
 
@@ -58,6 +69,7 @@ Python 3.10+ só com a biblioteca padrão. Tela em HTML/CSS/JS puro servida pelo
 | Parte | Onde |
 |---|---|
 | Agenda e regras | `estudio/agenda.py` |
+| Motor do Pastas do dia (agenda, criar pasta) | `estudio/pastas_do_dia.py` |
 | Vigia, registro, conferência e envio | `estudio/vigia.py` |
 | rclone, Subir no Drive e transcribe | `estudio/rclone.py` |
 | Servidor e tela | `estudio/server.py`, `estudio/ui/` |

@@ -77,7 +77,7 @@ def preparar(base: Path, estavel_seg: int = 3) -> dict:
                       encoding="utf-8")
     return appdata.salvar({
         "pasta_obs": str(base / "gravacoes-obs"), "pasta_saida": str(base / "saida"),
-        "agenda": str(agenda), "pasta_envio": str(base / "drive-falso"), "envio_modo": "pasta", "transcrever": False,
+        "agenda": str(agenda), "pasta_envio": str(base / "drive-falso"), "envio_modo": "pasta", "transcrever": False, "pastas_do_dia_url": "",
         "estavel_seg": estavel_seg, "nome_maquina": "Simulação (Fase 1)",
     })
 

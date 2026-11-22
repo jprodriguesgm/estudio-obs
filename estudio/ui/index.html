@@ -17,38 +17,60 @@
   </div>
 
   <div class="faixa-aviso hidden" id="faltando"></div>
-  <div class="faixa-aviso hidden" id="erro-geral"></div>
+  <div class="faixa-aviso erro hidden" id="erro-geral"></div>
 
   <!-- Gravando agora (é também a janelinha) -->
   <div class="caixa agora" id="agora">
     <div class="rotulo">Gravando agora <span class="dica-inline" id="relogio"></span></div>
     <div id="agora-status"></div>
-    <div class="linha troca">
-      <select class="campo" id="troca-select"></select>
-      <button class="btn" id="troca-btn">Trocar professor</button>
-      <button class="btn hidden" id="troca-voltar">Voltar para a agenda</button>
+    <details class="troca-det" id="troca-det">
+      <summary>Trocar professor</summary>
+      <div class="linha troca">
+        <select class="campo" id="troca-select"></select>
+        <button class="btn" id="troca-btn">Trocar</button>
+        <button class="btn hidden" id="troca-voltar">Voltar a seguir o horário</button>
+      </div>
+      <div class="dica" id="troca-dica">Use quando o professor estiver no horário de outro, ou quando houver dois professores no mesmo horário. Vale para a gravação atual e as próximas, até a agenda chegar ao horário de outro professor.</div>
+    </details>
+  </div>
+
+  <!-- Tela 1: agenda do dia -->
+  <div id="tela-agenda" class="so-cheia">
+    <div class="caixa">
+      <div class="rotulo">Agenda de hoje <span id="agenda-data"></span>
+        <span class="dica-inline" id="agenda-info"></span>
+        <button class="btn pequeno" id="atualizar-agenda" title="Busca de novo no Pastas do dia">Atualizar</button></div>
+      <div id="agenda"></div>
     </div>
-    <div class="dica" id="troca-dica">Use quando o professor estiver no horário de outro, ou quando houver dois professores no mesmo horário. Vale para a gravação atual e as próximas, até a agenda mudar de horário.</div>
+    <div class="caixa" id="caixa-outras">
+      <div class="rotulo">Outras gravações (testes, sem agenda, outros dias)</div>
+      <div id="outras"></div>
+    </div>
   </div>
 
-  <div class="caixa so-cheia">
-    <div class="rotulo">Agenda do dia <span class="dica-inline" id="agenda-arquivo"></span></div>
-    <div id="agenda"></div>
-  </div>
-
-  <div class="caixa so-cheia">
-    <div class="rotulo">Gravações — conferência antes de subir</div>
-    <div class="dica" style="margin-bottom:8px">Confira professor, horário e duração. Se algo foi para o lugar errado, use "Mover para". Quando estiver certo, clique em <b>Conferido, pode subir</b>. O app nunca apaga nada: depois do envio, ele confere nome e tamanho no destino e avisa quando pode apagar.</div>
-    <div id="grupos"></div>
+  <!-- Tela 2: professor escolhido -->
+  <div id="tela-sessao" class="so-cheia hidden">
+    <div class="caixa sessao">
+      <div class="linha"><button class="btn" id="voltar">← Voltar para a agenda</button>
+        <span class="dica-inline" id="sessao-links"></span></div>
+      <div id="sessao-cab"></div>
+    </div>
+    <div class="caixa">
+      <div class="rotulo">Gravações deste professor hoje</div>
+      <div class="dica" style="margin-bottom:8px">Pode gravar no OBS normalmente: cada gravação vem para cá alguns segundos depois de parar. Confira e clique em <b>Conferido, pode subir</b>: o app transcreve, sobe para o Drive e confere. Depois, volte para a agenda para o próximo professor.</div>
+      <div id="sessao-grupo"></div>
+    </div>
   </div>
 
   <!-- Configurações -->
   <div class="caixa so-cheia hidden" id="config">
     <div class="rotulo">Configurações desta máquina</div>
     <div class="cfg" data-campo="nome_maquina" data-tipo="texto"><label>Nome desta máquina</label><div class="linha"><input class="campo" placeholder="ex.: Estúdio 1 — São Gabriel"></div></div>
+    <div class="cfg" data-campo="pastas_do_dia_url" data-tipo="texto"><label>Link do Pastas do dia (o mesmo /exec do Configurar da tela dele)</label><div class="linha"><input class="campo mono" id="pd-input" placeholder="https://script.google.com/macros/s/…/exec"><button class="btn pequeno" id="testar-pd">Testar</button></div>
+      <div class="dica" id="pd-dica">Com o link, a agenda vem do Pastas do dia (agenda producao.eadiec + códigos da planilha) e o app cria as pastas no Drive. Sem o link, usa o arquivo de agenda abaixo (simulação).</div></div>
+    <div class="cfg" data-campo="agenda" data-tipo="arquivo"><label>Arquivo de agenda (.json) — só sem o link acima</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
     <div class="cfg" data-campo="pasta_obs" data-tipo="pasta"><label>Pasta onde o OBS grava</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
     <div class="cfg" data-campo="pasta_saida" data-tipo="pasta"><label>Pasta de saída (onde nascem as pastas dos professores)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
-    <div class="cfg" data-campo="agenda" data-tipo="arquivo"><label>Arquivo da agenda do dia (.json)</label><div class="linha"><input class="campo mono"><button class="btn pequeno escolher">Escolher…</button></div></div>
     <div class="cfg" data-campo="envio_modo" data-tipo="escolha"><label>Como subir</label><div class="linha"><select class="campo">
       <option value="rclone">Pelo rclone, com a conta do Subir no Drive (uso normal)</option>
       <option value="pasta">Copiar para uma pasta (simulação: drive-falso)</option></select></div></div>

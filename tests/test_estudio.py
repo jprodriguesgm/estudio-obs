@@ -225,3 +225,78 @@ def test_erro_do_rclone_nao_marca_como_enviado(app, tmp_path, monkeypatch):
     assert env["estado"] == "erro" and "não existe" in env["msg"]
     assert est.registro[0]["estado"] == "erro"
     assert Path(est.registro[0]["caminho"]).is_file()
+
+
+# ------------------------------------------------------------------ Pastas do dia: agenda → professor → gravar
+
+def _dados_pd():
+    return {"dia": date.today().strftime("%Y %m %d"), "ano": "26", "gravacoes": [
+        {"id": "a1", "hora": "08:00–09:00", "tipo": "TP", "professor": "Jorge Augusto", "curso": "C", "disciplina": "D",
+         "cancelada": False, "candidatos": [{"codigo": "26_824", "nota": 3,
+                                              "pasta": {"id": "P824", "nome": "26_824 Jorge Augusto Pereira"}}]},
+        {"id": "b2", "hora": "10:00–11:00", "tipo": "TV", "professor": "Bruno Chiriu", "curso": "C", "disciplina": "E",
+         "cancelada": False, "candidatos": [{"codigo": "26_646", "nota": 2, "pasta": None},
+                                             {"codigo": "26_714", "nota": 2, "pasta": {"id": "P714", "nome": "26_714 Bruno da Silva Chiriu"}}]},
+        {"id": "c3", "hora": "13:00–14:00", "tipo": "TP", "professor": "Fulano", "curso": "", "disciplina": "",
+         "cancelada": True, "candidatos": []},
+    ]}
+
+
+@pytest.fixture()
+def pd(app, monkeypatch):
+    from estudio import appdata, pastas_do_dia
+    chamadas = []
+
+    def falso(url, params, tempo=90):
+        chamadas.append(params)
+        if params["acao"] == "carregar":
+            return _dados_pd()
+        if params["acao"] == "criar":
+            return {"url": f"https://drive/{params['pasta']}/{params['data']}", "jaExistia": False}
+        return {}
+    monkeypatch.setattr(pastas_do_dia, "_chamar", falso)
+    appdata.salvar({"pastas_do_dia_url": "https://script.google.com/macros/s/X/exec"})
+    app["est"].atualizar_agenda(esperar=True)
+    return chamadas
+
+
+def test_agenda_do_pastas_do_dia(app, pd):
+    a = app["est"].agenda()
+    assert a.fonte == "pastas do dia" and len(a.eventos) == 2 and len(a.canceladas) == 1
+    jorge, bruno = a.eventos
+    assert jorge.pasta == "26_824 Jorge Augusto Pereira"          # nome da pasta do Drive
+    assert bruno.codigo == "26_714" and bruno.pasta_id == "P714"   # empate: prefere o que tem pasta
+    assert "Mais de um código" in bruno.aviso
+    from estudio import agenda as ag
+    assert ag.decidir(_hoje(8, 15), a).pasta == "26_824 Jorge Augusto Pereira"
+    # a cópia guardada serve se a internet cair
+    from estudio import vigia
+    assert vigia.Estudio().pd["dados"]["gravacoes"][0]["id"] == "a1"
+
+
+def test_gravar_com_este_professor(app, pd, monkeypatch):
+    from estudio import vigia
+    est, cfg = app["est"], app["cfg"]
+    monkeypatch.setattr(vigia, "_agora", lambda: _hoje(8, 20))    # no horário do Jorge
+    r = est.selecionar("b2")                                       # mas quem chegou foi o Bruno
+    assert r["avisos"] == []
+    dia = date.today().strftime("%Y %m %d")
+    base = Path(cfg["pasta_saida"]) / "26_714 Bruno da Silva Chiriu" / dia
+    assert (base / "Footage").is_dir() and (base / "Originais").is_dir()
+    assert {"acao": "criar", "pasta": "P714", "data": date.today().isoformat()} in pd
+    assert est.sessao == "b2" and est.resumo()["sessao"]["evento"]["pasta_dia_url"].startswith("https://drive/P714")
+    _gravar_e_parar(est, cfg, "08-21-00", time.time())
+    assert est.registro[-1]["pasta"] == "26_714 Bruno da Silva Chiriu"
+    # voltar para a agenda e escolher o professor do horário: a troca some
+    est.voltar_agenda()
+    est.selecionar("a1")
+    assert est.troca is None
+    _gravar_e_parar(est, cfg, "08-40-00", time.time() + 10)
+    assert est.registro[-1]["pasta"] == "26_824 Jorge Augusto Pereira"
+
+
+def test_trocar_codigo_do_professor(app, pd):
+    est = app["est"]
+    est.escolhas_codigo["b2"] = 0
+    b = est.agenda().evento("b2")
+    assert b.codigo == "26_646" and b.pasta == "26_646 Bruno Chiriu" and "não encontrada" in b.aviso

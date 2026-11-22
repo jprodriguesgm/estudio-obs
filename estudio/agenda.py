@@ -55,14 +55,31 @@ class Evento:
     professor: str
     codigo: str = ""
     indice: int = 0
+    # o que vem do Pastas do dia (na agenda .json fica vazio)
+    id: str = ""
+    nome_pasta: str = ""         # nome da pasta do professor no Drive ("26_824 Jorge Augusto …")
+    tipo: str = ""
+    curso: str = ""
+    disciplina: str = ""
+    pasta_id: str = ""           # id da pasta do professor no Drive (para criar a pasta do dia)
+    pasta_url: str = ""
+    pasta_dia_url: str = ""
+    candidatos: list = field(default_factory=list)
+    escolha: int = -1
+    aviso: str = ""
 
     @property
     def pasta(self) -> str:
-        return f"{self.codigo} {self.professor}".strip()
+        return self.nome_pasta or f"{self.codigo} {self.professor}".strip()
 
     def para_json(self) -> dict:
         return {"inicio": self.inicio.strftime("%H:%M"), "fim": self.fim.strftime("%H:%M"),
-                "professor": self.professor, "codigo": self.codigo, "pasta": self.pasta, "indice": self.indice}
+                "professor": self.professor, "codigo": self.codigo, "pasta": self.pasta, "indice": self.indice,
+                "id": self.id or f"ev{self.indice}", "tipo": self.tipo, "curso": self.curso,
+                "disciplina": self.disciplina, "tem_pasta_drive": bool(self.pasta_id), "pasta_url": self.pasta_url,
+                "pasta_dia_url": self.pasta_dia_url, "escolha": self.escolha, "aviso": self.aviso,
+                "candidatos": [{"codigo": c.get("codigo", ""), "tem_pasta": bool(c.get("pasta"))}
+                               for c in self.candidatos]}
 
 
 @dataclass
@@ -70,10 +87,21 @@ class Agenda:
     data: date | None = None
     eventos: list[Evento] = field(default_factory=list)
     erro: str | None = None
+    fonte: str = "arquivo"           # "arquivo" (.json) ou "pastas do dia"
+    canceladas: list[dict] = field(default_factory=list)
+    carregando: bool = False
+    info: str = ""                   # ex.: "atualizada às 07:58" ou "sem internet: usando a cópia das 07:58"
 
     def para_json(self) -> dict:
-        return {"data": self.data.isoformat() if self.data else None, "erro": self.erro,
-                "eventos": [e.para_json() for e in self.eventos]}
+        return {"data": self.data.isoformat() if self.data else None, "erro": self.erro, "fonte": self.fonte,
+                "eventos": [e.para_json() for e in self.eventos], "canceladas": self.canceladas,
+                "carregando": self.carregando, "info": self.info}
+
+    def evento(self, id_: str) -> "Evento | None":
+        for e in self.eventos:
+            if (e.id or f"ev{e.indice}") == id_:
+                return e
+        return None
 
     def pastas(self) -> list[str]:
         """Destinos possíveis (para "Trocar professor" e para mover na conferência), sem repetir."""
@@ -124,6 +152,55 @@ def ler(caminho: str | Path | None) -> Agenda:
     return Agenda(d, eventos)
 
 
+def _hora_pd(txt: str) -> tuple[time, time]:
+    """ "08:00–09:00" (traço comprido do Apps Script) → (08:00, 09:00)."""
+    partes = re.split(r"\s*[–—-]\s*", str(txt).strip())
+    return _hora(partes[0]), _hora(partes[1])
+
+
+def de_pastas_do_dia(dados: dict, data: date, escolhas: dict | None = None) -> Agenda:
+    """Agenda a partir do "carregar" do Pastas do dia. escolhas = {id do evento: índice do código escolhido}."""
+    from .pastas_do_dia import escolha_padrao
+    escolhas = escolhas or {}
+    eventos, canceladas = [], []
+    for i, g in enumerate(dados.get("gravacoes") or []):
+        try:
+            ini, fim = _hora_pd(g.get("hora", ""))
+        except (ValueError, IndexError):
+            continue
+        prof = str(g.get("professor") or "").strip()
+        if not prof:
+            continue
+        if g.get("cancelada"):
+            canceladas.append({"hora": g.get("hora"), "professor": prof, "tipo": g.get("tipo", "")})
+            continue
+        cands = list(g.get("candidatos") or [])
+        gid = str(g.get("id") or f"pd{i}")
+        esc = escolhas.get(gid, escolha_padrao(cands))
+        if not (0 <= esc < len(cands)):
+            esc = escolha_padrao(cands)
+        c = cands[esc] if esc >= 0 else {}
+        pasta = c.get("pasta") or {}
+        codigo = str(c.get("codigo") or "").strip()
+        nome = str(pasta.get("nome") or pasta.get("name") or "").strip()
+        aviso = ""
+        if not cands:
+            aviso = "Sem código na planilha: a pasta vai ficar só com o nome do professor."
+        elif not pasta:
+            aviso = "Pasta do professor não encontrada no Drive."
+        elif len(cands) > 1:
+            aviso = "Mais de um código para este professor: confira o código."
+        eventos.append(Evento(ini, fim, prof, codigo, i, id=gid, nome_pasta=nome, tipo=str(g.get("tipo") or ""),
+                              curso=str(g.get("curso") or ""), disciplina=str(g.get("disciplina") or ""),
+                              pasta_id=str(pasta.get("id") or ""), pasta_url=str(pasta.get("url") or ""),
+                              pasta_dia_url=str((c.get("pastaDia") or {}).get("url") or ""),
+                              candidatos=cands, escolha=esc, aviso=aviso))
+    eventos.sort(key=lambda e: (e.inicio, e.indice))
+    for i, e in enumerate(eventos):
+        e.indice = i
+    return Agenda(data, eventos, fonte="pastas do dia", canceladas=canceladas)
+
+
 @dataclass
 class Decisao:
     pasta: str                   # "26_101 Ana Souza", "Testes" ou "Sem agenda"
@@ -145,7 +222,13 @@ def _aviso_mesmo_horario(escolhido: Evento, outros: list[Evento]) -> str:
     return f"Também na agenda neste horário: {', '.join(nomes)}. Se for outro professor, use Trocar professor."
 
 
+def _chave(e: Evento) -> str:
+    return e.id or f"ev{e.indice}"
+
+
 def decidir(quando: datetime, agenda: Agenda, antecedencia_min: int = 30) -> Decisao:
+    if agenda.carregando:
+        return Decisao(SEM_AGENDA, "a agenda ainda está carregando", "carregando")
     if agenda.erro or agenda.data is None:
         return Decisao(SEM_AGENDA, "sem agenda carregada", "sem-agenda")
     if quando.date() != agenda.data:
@@ -165,7 +248,7 @@ def decidir(quando: datetime, agenda: Agenda, antecedencia_min: int = 30) -> Dec
     dentro = [e for e in agenda.eventos if ini(e) <= t < fim(e)]
     if dentro:
         e = dentro[0]
-        return Decisao(e.pasta, f"dentro do horário ({e.inicio:%H:%M}–{e.fim:%H:%M})", f"ev{e.indice}",
+        return Decisao(e.pasta, f"dentro do horário ({e.inicio:%H:%M}–{e.fim:%H:%M})", _chave(e),
                        e.professor, _aviso_mesmo_horario(e, dentro))
 
     logo = [e for e in agenda.eventos if ini(e) - ant <= t < ini(e)]
@@ -173,7 +256,7 @@ def decidir(quando: datetime, agenda: Agenda, antecedencia_min: int = 30) -> Dec
         primeiro = min(ini(e) for e in logo)
         mesmos = [e for e in logo if ini(e) == primeiro]
         e = mesmos[0]
-        return Decisao(e.pasta, f"até {antecedencia_min} min antes do horário ({e.inicio:%H:%M})", f"ev{e.indice}",
+        return Decisao(e.pasta, f"até {antecedencia_min} min antes do horário ({e.inicio:%H:%M})", _chave(e),
                        e.professor, _aviso_mesmo_horario(e, mesmos))
 
     if t < ini(agenda.eventos[0]) - ant:
@@ -184,7 +267,7 @@ def decidir(quando: datetime, agenda: Agenda, antecedencia_min: int = 30) -> Dec
         ultimo_fim = max(fim(e) for e in terminados)
         mesmos = [e for e in terminados if fim(e) == ultimo_fim]
         e = mesmos[0]
-        return Decisao(e.pasta, f"depois do fim ({e.fim:%H:%M}), continua com o último", f"ev{e.indice}",
+        return Decisao(e.pasta, f"depois do fim ({e.fim:%H:%M}), continua com o último", _chave(e),
                        e.professor, _aviso_mesmo_horario(e, mesmos))
 
     return Decisao(SEM_AGENDA, "nenhum horário da agenda bate", "sem-agenda")

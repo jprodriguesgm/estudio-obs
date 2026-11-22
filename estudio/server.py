@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, appdata, dialogs, rclone
+from . import __version__, appdata, dialogs, pastas_do_dia, rclone
 from .vigia import ESTUDIO
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
@@ -51,7 +51,14 @@ def acao_testar(corpo) -> dict:
 
 
 def acao_config(corpo) -> dict:
-    appdata.salvar(corpo.get("mudancas") or {})
+    m = dict(corpo.get("mudancas") or {})
+    antes = appdata.carregar().get("pastas_do_dia_url") or ""
+    if "pastas_do_dia_url" in m:
+        m["pastas_do_dia_url"] = pastas_do_dia.limpar_url(m["pastas_do_dia_url"] or "")
+    appdata.salvar(m)
+    if m.get("pastas_do_dia_url") and m["pastas_do_dia_url"] != antes:
+        ESTUDIO.pd.update(data=None, dados=None, quando=0, erro=None)
+        ESTUDIO.atualizar_agenda()
     return acao_estado()
 
 
@@ -113,10 +120,44 @@ def acao_mostrar(corpo) -> dict:
     return {"ok": True}
 
 
+def acao_selecionar(corpo) -> dict:
+    try:
+        r = ESTUDIO.selecionar(corpo["id"], corpo.get("codigo"))
+    except (KeyError, ValueError) as e:
+        raise ApiError(str(e))
+    return {**acao_estado(), "selecionado": r}
+
+
+def acao_voltar(_corpo) -> dict:
+    ESTUDIO.voltar_agenda()
+    return acao_estado()
+
+
+def acao_codigo(corpo) -> dict:
+    """Troca o código (quando o professor tem mais de um) sem abrir a tela dele."""
+    ESTUDIO.escolhas_codigo[corpo["id"]] = int(corpo["codigo"])
+    return acao_estado()
+
+
+def acao_atualizar_agenda(_corpo) -> dict:
+    ESTUDIO.atualizar_agenda(esperar=True)
+    return acao_estado()
+
+
+def acao_testar_pd(corpo) -> dict:
+    url = pastas_do_dia.limpar_url(corpo.get("url") or "")
+    try:
+        return {"msg": pastas_do_dia.testar(url), "url": url}
+    except pastas_do_dia.ErroPastas as e:
+        raise ApiError(str(e))
+
+
 GET = {"/api/estado": acao_estado}
 POST = {"/api/config": acao_config, "/api/escolher": acao_escolher, "/api/trocar": acao_trocar,
         "/api/mover": acao_mover, "/api/subir": acao_subir, "/api/esquecer": acao_esquecer,
-        "/api/mostrar": acao_mostrar, "/api/testar": acao_testar}
+        "/api/mostrar": acao_mostrar, "/api/testar": acao_testar, "/api/selecionar": acao_selecionar,
+        "/api/voltar": acao_voltar, "/api/codigo": acao_codigo, "/api/atualizar_agenda": acao_atualizar_agenda,
+        "/api/testar_pd": acao_testar_pd}
 
 
 # ====================================================================== HTTP

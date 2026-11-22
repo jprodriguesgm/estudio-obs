@@ -20,7 +20,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import agenda as ag
-from . import appdata, mp4info, rclone
+from . import appdata, mp4info, pastas_do_dia, rclone
 
 
 def _agora() -> datetime:
@@ -56,6 +56,10 @@ class Estudio:
         self.erros: dict[str, str] = {}         # nome → motivo de não ter conseguido mover (tenta de novo)
         self.troca: dict | None = None          # {"chave", "pasta", "dia"}: vale enquanto a agenda apontar a mesma chave
         self.envios: dict[str, dict] = {}       # "pasta|dia" → andamento do envio
+        self.pd: dict = self._carregar_cache_pd()  # agenda do Pastas do dia: {"data", "dados", "quando", "erro", "carregando"}
+        self.escolhas_codigo: dict[str, int] = {}  # id do evento → índice do código escolhido
+        self.pasta_dia_urls: dict[str, str] = {}   # id do evento → link da pasta do dia no Drive (depois de criar)
+        self.sessao: str | None = None            # id do evento aberto na tela do professor
         self.registro: list[dict] = self._carregar_registro()
         self.ultimo_ciclo: float = 0.0
         self._thread: threading.Thread | None = None
@@ -86,15 +90,120 @@ class Estudio:
 
     # ------------------------------------------------------------------ decisão
 
+    # ------------------------------------------------------------------ agenda (arquivo .json ou Pastas do dia)
+
+    @staticmethod
+    def _arq_cache_pd() -> Path:
+        return appdata.home() / "agenda-pastas-do-dia.json"
+
+    def _carregar_cache_pd(self) -> dict:
+        """Última agenda que veio do Pastas do dia (serve quando a internet cai)."""
+        try:
+            c = json.loads(self._arq_cache_pd().read_text(encoding="utf-8"))
+            return {"data": c["data"], "dados": c["dados"], "quando": c["quando"], "erro": None, "carregando": False}
+        except (OSError, ValueError, KeyError):
+            return {"data": None, "dados": None, "quando": 0, "erro": None, "carregando": False}
+
+    def atualizar_agenda(self, cfg: dict | None = None, esperar: bool = False):
+        """Busca a agenda de hoje no Pastas do dia (em segundo plano; demora alguns segundos)."""
+        cfg = cfg or appdata.carregar()
+        url = (cfg.get("pastas_do_dia_url") or "").strip()
+        if not url or self.pd.get("carregando"):
+            return
+        hoje = _agora().date().isoformat()
+        self.pd["carregando"] = True
+
+        def buscar():
+            try:
+                dados = pastas_do_dia.carregar(url, hoje)
+                with self.lock:
+                    self.pd.update(data=hoje, dados=dados, quando=time.time(), erro=None)
+                try:
+                    self._arq_cache_pd().write_text(json.dumps({"data": hoje, "dados": dados, "quando": time.time()},
+                                                               ensure_ascii=False), encoding="utf-8")
+                except OSError:
+                    pass
+            except pastas_do_dia.ErroPastas as e:
+                with self.lock:
+                    self.pd.update(erro=str(e), quando=time.time())
+            finally:
+                self.pd["carregando"] = False
+
+        if esperar:
+            buscar()
+        else:
+            threading.Thread(target=buscar, daemon=True).start()
+
     def agenda(self, cfg: dict | None = None) -> ag.Agenda:
         cfg = cfg or appdata.carregar()
-        return ag.ler(cfg.get("agenda"))
+        url = (cfg.get("pastas_do_dia_url") or "").strip()
+        if not url:
+            return ag.ler(cfg.get("agenda"))
+        hoje = _agora().date()
+        pd = self.pd
+        velha = time.time() - (pd.get("quando") or 0) > 15 * 60
+        if (pd.get("data") != hoje.isoformat() or velha) and not pd.get("carregando"):
+            self.atualizar_agenda(cfg)
+        if pd.get("dados") is not None and pd.get("data") == hoje.isoformat():
+            a = ag.de_pastas_do_dia(pd["dados"], hoje, self.escolhas_codigo)
+            for e in a.eventos:
+                if e.id in self.pasta_dia_urls:
+                    e.pasta_dia_url = self.pasta_dia_urls[e.id]
+            hora = datetime.fromtimestamp(pd["quando"]).strftime("%H:%M") if pd.get("quando") else ""
+            a.info = (f"sem conexão com o Pastas do dia ({pd['erro']}); usando a cópia das {hora}" if pd.get("erro")
+                      else f"Pastas do dia · atualizada às {hora}")
+            return a
+        if pd.get("carregando") or pd.get("data") != hoje.isoformat() and not pd.get("erro"):
+            return ag.Agenda(hoje, carregando=True, fonte="pastas do dia", info="carregando a agenda do Pastas do dia…")
+        return ag.Agenda(erro=f"Não consegui ler a agenda do Pastas do dia: {pd.get('erro')}", fonte="pastas do dia")
+
+    # ------------------------------------------------------------------ escolher o professor na agenda
+
+    def selecionar(self, evento_id: str, codigo: int | None = None) -> dict:
+        """"Gravar com este professor": cria as pastas (Drive e local) e manda as próximas gravações para ele.
+
+        Funciona como o "Trocar professor": vale a partir de agora, até a agenda chegar ao horário de outro
+        professor (aí volta a seguir o horário sozinho).
+        """
+        cfg = appdata.carregar()
+        with self.lock:
+            if codigo is not None:
+                self.escolhas_codigo[evento_id] = int(codigo)
+            a = self.agenda(cfg)
+            e = a.evento(evento_id)
+            if e is None:
+                raise ValueError("Esse horário não está mais na agenda. Atualize a agenda.")
+            dia = ag.pasta_dia(a.data)
+            avisos = []
+            saida = cfg.get("pasta_saida")
+            if saida and Path(saida).is_dir():
+                for sub in ("Footage", "Originais"):
+                    (Path(saida) / e.pasta / dia / sub).mkdir(parents=True, exist_ok=True)
+            else:
+                avisos.append("pasta de saída não configurada")
+        url = (cfg.get("pastas_do_dia_url") or "").strip()
+        if url and e.pasta_id:
+            try:
+                r = pastas_do_dia.criar(url, e.pasta_id, a.data.isoformat())
+                if r.get("url"):
+                    self.pasta_dia_urls[evento_id] = r["url"]
+            except pastas_do_dia.ErroPastas as erro:
+                avisos.append(f"não consegui criar a pasta no Drive ({erro}); o envio cria na hora de subir")
+        elif url:
+            avisos.append("pasta do professor não encontrada no Drive; o envio cria uma com este nome")
+        with self.lock:
+            self.trocar(e.pasta)
+            self.sessao = evento_id
+        return {"pasta": e.pasta, "avisos": avisos}
+
+    def voltar_agenda(self):
+        self.sessao = None
 
     def decidir(self, quando: datetime, agenda: ag.Agenda, cfg: dict) -> ag.Decisao:
         d = ag.decidir(quando, agenda, int(cfg.get("antecedencia_min") or 30))
         t = self.troca
         if t and t["chave"] == d.chave and t["dia"] == quando.date().isoformat() and t["pasta"] != d.pasta:
-            return ag.Decisao(t["pasta"], f"trocado na janelinha (a agenda dizia {d.pasta})", d.chave,
+            return ag.Decisao(t["pasta"], f"escolhido à mão (pelo horário seria {d.pasta})", d.chave,
                               t["pasta"], "", True)
         return d
 
@@ -117,6 +226,9 @@ class Estudio:
                 if h:
                     ref = h
             d = ag.decidir(ref, self.agenda(cfg), int(cfg.get("antecedencia_min") or 30))
+            if d.pasta == pasta:                  # a agenda já manda para este professor
+                self.troca = None
+                return None
             self.troca = {"chave": d.chave, "pasta": pasta, "dia": ref.date().isoformat(),
                           "agenda_dizia": d.pasta}
             return self.troca
@@ -200,7 +312,11 @@ class Estudio:
             self.erros[p.name] = "Pasta de saída não configurada."
             return
         quando = ag.hora_do_nome(p.name)
-        d = self.decidir(quando, self.agenda(cfg), cfg)
+        agenda = self.agenda(cfg)
+        if agenda.carregando:
+            self.erros[p.name] = "Esperando a agenda carregar para saber o professor."
+            return
+        d = self.decidir(quando, agenda, cfg)
         dia = ag.pasta_dia(quando.date())
         destino_dir = self._footage(cfg, d.pasta, dia)
         tam = p.stat().st_size
@@ -430,6 +546,14 @@ class Estudio:
 
     # ------------------------------------------------------------------ o que a tela mostra
 
+    def _sessao_json(self, agenda: ag.Agenda) -> dict | None:
+        if not self.sessao or agenda.data is None:
+            return None
+        e = agenda.evento(self.sessao)
+        if e is None:
+            return None
+        return {"evento": e.para_json(), "dia": ag.pasta_dia(agenda.data), "data": agenda.data.isoformat()}
+
     def resumo(self) -> dict:
         cfg = appdata.carregar()
         agenda = self.agenda(cfg)
@@ -453,6 +577,7 @@ class Estudio:
                 "gravando": gravando, "presos": parados, "atual": atual.para_json(),
                 "referencia": ref.isoformat(timespec="seconds"),
                 "troca": self.troca, "grupos": self.grupos(), "faltando": appdata.faltando(cfg),
+                "sessao": self._sessao_json(agenda),
                 "vigia_ok": time.time() - self.ultimo_ciclo < 5,
             }
 

@@ -19,7 +19,8 @@ APP_NAME = "Estudio"
 DEFAULTS = {
     "pasta_obs": None,        # onde o OBS grava (o app vigia esta pasta)
     "pasta_saida": None,      # onde nascem as pastas "26_xxx Professor/AAAA MM DD/Footage"
-    "agenda": None,           # arquivo da agenda do dia (.json)
+    "pastas_do_dia_url": "",  # link /exec do motor do Pastas do dia: agenda do dia + criar pasta no Drive
+    "agenda": None,           # sem o link acima: arquivo da agenda do dia (.json) — a simulação usa
     "envio_modo": "rclone",   # "rclone" (conta do Subir no Drive) ou "pasta" (copia para uma pasta; a simulação usa)
     "pasta_envio": None,      # modo pasta: para onde "Conferido, pode subir" copia (na simulação, drive-falso)
     "rclone_destino": "",     # modo rclone: conexão e pasta, ex.: "drive:Gravações IEC". Vazio = a do Subir no Drive
@@ -92,6 +93,6 @@ def faltando(cfg: dict) -> list[str]:
         out.append("pasta do OBS")
     if not cfg.get("pasta_saida") or not Path(cfg["pasta_saida"]).is_dir():
         out.append("pasta de saída")
-    if not cfg.get("agenda") or not Path(cfg["agenda"]).is_file():
-        out.append("arquivo da agenda")
+    if not (cfg.get("pastas_do_dia_url") or "").strip() and (not cfg.get("agenda") or not Path(cfg["agenda"]).is_file()):
+        out.append("agenda (link do Pastas do dia)")
     return out

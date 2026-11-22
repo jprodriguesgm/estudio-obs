@@ -63,7 +63,7 @@ select.campo{appearance:auto}
 .grupo-topo .info{color:var(--fraco);font-size:12px}
 .grupo-topo .acao{margin-left:auto;display:flex;align-items:center;gap:8px}
 .grupo.especial .grupo-topo .nome{color:var(--alerta)}
-.item{display:grid;grid-template-columns:70px minmax(0,1.4fr) 70px 80px minmax(0,1.6fr) 170px;gap:8px;align-items:center;
+.item{display:grid;grid-template-columns:56px minmax(0,1.4fr) 60px 70px minmax(0,1.6fr) 150px;gap:8px;align-items:center;
   padding:6px 10px;border-top:1px solid rgba(255,255,255,.06);font-size:12px}
 .item .arq{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .item .arq:hover{text-decoration:underline}
@@ -96,3 +96,33 @@ body.mini .troca .campo{flex-basis:100%}
 .andamento .dica{text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px}
 .grupo-msg{padding:6px 10px;font-size:12px;border-top:1px solid rgba(255,255,255,.06)}
 .grupo-msg.ok{color:var(--ok)}.grupo-msg.erro{color:var(--erro)}.grupo-msg.info{color:var(--fraco)}
+
+/* agenda: cartões */
+.evento{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;
+  border:1px solid var(--linha);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,.02)}
+.evento.atual{border-color:rgba(74,143,231,.55)}
+.evento.escolhido{background:rgba(74,143,231,.12);border-color:rgba(74,143,231,.8)}
+.ev-hora{font-size:20px;font-weight:500;line-height:1.1}.ev-hora small{display:block;font-size:11px;color:var(--fraco);font-weight:400}
+.ev-nome{font-size:16px;font-weight:600}
+.ev-sub{color:var(--fraco);font-size:12px;margin:1px 0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ev-chips .cod{font-family:var(--mono);font-size:12px;color:var(--texto2);margin-right:2px}
+.ev-chips select.codigo{flex:none;padding:3px 6px;font-size:12px;font-family:var(--mono)}
+.chip{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--linha2);color:var(--texto2);white-space:nowrap}
+.chip.agora{color:#b9d4ff;border-color:rgba(74,143,231,.7)}
+.chip.escolhido{color:#fff;background:var(--azul);border-color:rgba(255,255,255,.5)}
+.chip.ok{color:var(--ok);border-color:rgba(127,209,155,.45)}
+.chip.ruim{color:var(--alerta);border-color:rgba(240,198,116,.45)}
+.canceladas{color:var(--fraco);font-size:12px;margin-top:4px;text-decoration:line-through}
+.rotulo .btn.pequeno{padding:3px 9px;font-size:11px}
+
+/* tela do professor */
+.sessao .ses-nome{font-size:24px;font-weight:600;margin-top:4px}
+.sessao .ses-sub{color:var(--fraco);font-size:12px}
+.sessao a,#sessao-links a{color:#9cc3ff;text-decoration:none}
+.sessao a:hover{text-decoration:underline}
+
+/* troca (recolhida) */
+.troca-det summary{font-size:12px;color:var(--fraco);margin-top:6px}
+.troca-det[open] summary{margin-bottom:6px}
+body.mini .troca-det{display:block}
