@@ -124,6 +124,14 @@ def acao_esquecer(corpo) -> dict:
     return acao_estado()
 
 
+def acao_esquecer_grupo(corpo) -> dict:
+    try:
+        ESTUDIO.esquecer_grupo(corpo["pasta"], corpo["dia"])
+    except KeyError as e:
+        raise ApiError(str(e))
+    return acao_estado()
+
+
 def acao_mostrar(corpo) -> dict:
     """Mostra o arquivo no Finder / Explorer."""
     import subprocess
@@ -192,7 +200,8 @@ POST = {"/api/config": acao_config, "/api/escolher": acao_escolher, "/api/trocar
         "/api/mover": acao_mover, "/api/subir": acao_subir, "/api/esquecer": acao_esquecer,
         "/api/mostrar": acao_mostrar, "/api/testar": acao_testar, "/api/selecionar": acao_selecionar,
         "/api/voltar": acao_voltar, "/api/codigo": acao_codigo, "/api/atualizar_agenda": acao_atualizar_agenda,
-        "/api/testar_pd": acao_testar_pd, "/api/dia": acao_dia}
+        "/api/testar_pd": acao_testar_pd, "/api/dia": acao_dia,
+        "/api/esquecer_grupo": acao_esquecer_grupo}
 
 
 # ====================================================================== HTTP

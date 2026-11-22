@@ -343,3 +343,11 @@ def test_sobe_direto_na_pasta_do_dia_criada(app, pd, tmp_path, monkeypatch):
     assert (tmp_path / "drive" / "_id_1ABCdefGHIjklMNOpqr" / "Footage" / r["arquivo"]).is_file()
     assert not (tmp_path / "drive" / "Gravações IEC").exists()
     assert vigia.Estudio().pastas_drive[f"{r['pasta']}|{r['dia']}"] == "1ABCdefGHIjklMNOpqr"
+
+
+def test_tirar_da_lista_nao_apaga_arquivo(app):
+    est, cfg = app["est"], app["cfg"]
+    _gravar_e_parar(est, cfg, "07-12-05", time.time())
+    r = est.registro[0]
+    assert est.esquecer_grupo(r["pasta"], r["dia"]) == 1
+    assert est.grupos() == [] and Path(r["caminho"]).is_file()

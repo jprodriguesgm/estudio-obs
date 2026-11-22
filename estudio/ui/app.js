@@ -226,10 +226,11 @@ function htmlGrupo(e, g) {
       <span>${mover}</span>
     </div>`;
   }).join("");
+  const tirar = ocupado ? "" : `<button class="btn pequeno fraco" data-tirar="${esc(g.pasta)}" data-dia="${esc(g.dia)}" title="Some com este grupo da tela. Os arquivos continuam na pasta.">Tirar da lista</button>`;
   return `<div class="grupo ${especial ? "especial" : ""}">
     <div class="grupo-topo"><span class="nome">${esc(g.pasta)}</span>
       <span class="info">${dataBR(g.data)} · ${g.itens.length} gravação(ões) · ${duracao(durTotal)}</span>
-      <span class="acao">${acao}</span></div>${rodape}${itens}</div>`;
+      <span class="acao">${acao}${tirar}</span></div>${rodape}${itens}</div>`;
 }
 
 // ------------------------------------------------------------------ ações
@@ -265,6 +266,10 @@ document.addEventListener("click", async (ev) => {
     if (r && r.selecionado && r.selecionado.avisos.length) erro("Atenção: " + r.selecionado.avisos.join("; ") + ".");
   } else if (t.dataset.subir) acao("/api/subir", {pasta: t.dataset.subir, dia: t.dataset.dia}, t);
   else if (t.dataset.esquecer) acao("/api/esquecer", {id: t.dataset.esquecer}, t);
+  else if (t.dataset.tirar) {
+    if (t.dataset.confirmar) acao("/api/esquecer_grupo", {pasta: t.dataset.tirar, dia: t.dataset.dia}, t);
+    else { t.dataset.confirmar = "1"; t.textContent = "Clique de novo para tirar (arquivos ficam)"; setTimeout(() => { delete t.dataset.confirmar; t.textContent = "Tirar da lista"; }, 4000); }
+  }
   else if (t.dataset.mostrar) { try { await api("/api/mostrar", {caminho: t.dataset.mostrar}); } catch (x) { erro(x.message); } }
 });
 

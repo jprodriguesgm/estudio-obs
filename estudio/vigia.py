@@ -428,6 +428,15 @@ class Estudio:
             self.registro.remove(r)
             self._salvar_registro()
 
+    def esquecer_grupo(self, pasta: str, dia: str) -> int:
+        """"Tirar da lista": some com o grupo da tela. Não mexe em arquivo nenhum."""
+        with self.lock:
+            antes = len(self.registro)
+            self.registro = [r for r in self.registro if not (r["pasta"] == pasta and r["dia"] == dia)]
+            self.envios.pop(f"{pasta}|{dia}", None)
+            self._salvar_registro()
+            return antes - len(self.registro)
+
     def grupos(self) -> list[dict]:
         """Registro agrupado por dia e professor, para a tela de conferência."""
         with self.lock:
@@ -439,11 +448,14 @@ class Estudio:
                 item = dict(r)
                 item["existe"] = Path(r["caminho"]).is_file()
                 g["itens"].append(item)
+            hoje = _agora().date().isoformat()
             for g in out.values():
                 estados = {i["estado"] for i in g["itens"]}
                 g["enviado"] = estados == {"enviado"}
                 g["pode_subir"] = g["pasta"] not in (ag.TESTES, ag.SEM_AGENDA)
-            return sorted(out.values(), key=lambda g: (g["data"], g["itens"][0]["inicio"]))
+            # grupo de dia anterior já enviado não aparece mais (continua no registro e nas pastas)
+            visiveis = [g for g in out.values() if not (g["enviado"] and g["data"] < hoje)]
+            return sorted(visiveis, key=lambda g: (g["data"], g["itens"][0]["inicio"]))
 
     # ------------------------------------------------------------------ envio
 
