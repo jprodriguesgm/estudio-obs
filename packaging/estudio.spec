@@ -88,7 +88,7 @@ if IS_MAC:
             "CFBundleName": "Estúdio",
             "CFBundleShortVersionString": __version__,
             "CFBundleVersion": __version__,
-            # o mlx pede macOS 13.5; a versão com whisper.cpp roda a partir do 12
+            # ponto de partida; a montagem sobe para o maior macOS pedido pelos programas do app (mlx: 15)
             "LSMinimumSystemVersion": "13.5" if MOTOR == "mlx" else "12.0",
             "LSUIElement": True,                  # sem ícone no Dock: o app é a página no navegador
             "NSHighResolutionCapable": True,

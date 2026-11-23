@@ -3,7 +3,7 @@
 # ou quando alguém envia para o ramo "montagem" (montagem de teste).
 #   - "Versão oficial" vazia → "Montagem N (teste)", pré-lançamento.
 #   - "Versão oficial" = 1.2.3 (ou etiqueta v1.2.3) → versão oficial, no link releases/latest.
-# O Whisper vai dentro: Mac (13.5+) = mlx-whisper (o mesmo do transcribe); Mac antigo (12+) e Windows = whisper.cpp.
+# O Whisper vai dentro: Mac (15+) = mlx-whisper (o mesmo do transcribe); Mac antigo (12+) e Windows = whisper.cpp.
 # Os modelos ficam no cache entre uma montagem e outra.
 name: Montar o app
 
@@ -67,7 +67,7 @@ jobs:
         env:
           SISTEMAS: ${{ inputs.sistemas }}
         run: |
-          # mac = macOS 13.5+ com o mlx-whisper · mac-ventura = macOS 12+ com o whisper.cpp (Metal)
+          # mac = macOS 15+ com o mlx-whisper · mac-ventura = macOS 12+ com o whisper.cpp (Metal)
           MAC='{"os":"macos-15","nome":"mac","motor":"mlx"},{"os":"macos-15","nome":"mac-ventura","motor":"cpp"}'
           WIN='{"os":"windows-2022","nome":"windows","motor":"cpp"}'
           case "${SISTEMAS:-ambos}" in
@@ -292,7 +292,18 @@ jobs:
 
       - name: Assinar (Mac, sem conta de desenvolvedor)
         if: runner.os == 'macOS'
-        run: codesign --force --deep --sign - "dist/Estudio.app"
+        run: |
+          # o macOS mínimo do app = o maior pedido por qualquer programa/biblioteca dentro dele
+          # (assim um Mac antigo mostra o aviso do sistema em vez de abrir e quebrar)
+          MAIOR=$(find dist/Estudio.app -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.so' \) -print0 \
+            | xargs -0 -n1 sh -c 'otool -l "$0" 2>/dev/null | awk "/LC_BUILD_VERSION/{f=1} f&&/minos/{print \$2; exit}"' \
+            | python3 -c "import sys; v=[l.strip() for l in sys.stdin if l.strip()]; print(max(v, key=lambda x: [int(n) for n in x.split('.')]) if v else '')")
+          PLIST=dist/Estudio.app/Contents/Info.plist
+          ATUAL=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST")
+          NOVO=$(python3 -c "import sys; a,b=sys.argv[1],sys.argv[2]; f=lambda x:[int(n) for n in x.split('.')] if x else [0]; print(a if f(a)>=f(b) else b)" "$ATUAL" "$MAIOR")
+          /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $NOVO" "$PLIST"
+          echo "macOS mínimo: $NOVO (pedido pelos programas: $MAIOR)"
+          codesign --force --deep --sign - "dist/Estudio.app"
 
       - name: Diagnóstico do app montado (Mac)
         if: runner.os == 'macOS'
@@ -393,7 +404,7 @@ jobs:
           if [ -n "$VERSAO" ]; then
             TAG="v$VERSAO"
             TIT="Estúdio ${TAG#v}"; PRE="--latest"
-            AVISO="Versão oficial. Mac com macOS 13.5 ou mais novo: Estudio-mac.zip · Mac com macOS 12 a 13.4 (ex.: Ventura 13.1): Estudio-mac-ventura.zip · Windows: Estudio-windows.zip."
+            AVISO="Versão oficial. Mac com macOS 15 (Sequoia) ou mais novo: Estudio-mac.zip · Mac com macOS 12, 13 ou 14 (ex.: Ventura 13.1): Estudio-mac-ventura.zip · Windows: Estudio-windows.zip."
           else
             TAG="montagem-${GITHUB_RUN_NUMBER}"; TIT="Montagem ${GITHUB_RUN_NUMBER} (teste)"; PRE="--prerelease"
             AVISO="Versão de TESTE, ainda não liberada para as equipes."

@@ -4,9 +4,9 @@ Uma vez em cada computador do estúdio. O app já leva dentro o **Whisper** (tra
 não precisa instalar Python nem o transcribe.
 
 **Baixar** (sempre a versão oficial mais nova). Veja a versão do Mac em  → **Sobre este Mac**:
-- Mac com **macOS 13.5 ou mais novo** (Sonoma, Sequoia…):
+- Mac com **macOS 15 (Sequoia) ou mais novo**:
   https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip
-- Mac com **macOS 12 até 13.4** (ex.: o Mac Studio do estúdio, Ventura 13.1):
+- Mac com **macOS 12, 13 ou 14** (Monterey, Ventura, Sonoma — ex.: o Mac Studio do estúdio, Ventura 13.1):
   https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac-ventura.zip
 - Windows: https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-windows.zip
 
@@ -19,7 +19,7 @@ O que cada computador precisa:
 | Sistema | Mac com chip Apple (M1 ou mais novo), macOS 12 ou mais novo | Windows 10 ou 11, 64 bits |
 | **rclone** com a conexão `drive` (conta da instituição) | já pronto nos Macs com o **Subir no Drive** | instalar (passo 2 abaixo) |
 | **Link do Pastas do dia** (implantação "Estúdio") | colar nas Configurações | colar nas Configurações |
-| Transcrição | macOS 13.5+: mlx-whisper (igual ao transcribe) · macOS 12 a 13.4: whisper.cpp com a placa de vídeo | whisper.cpp |
+| Transcrição | macOS 15+: mlx-whisper (igual ao transcribe) · macOS 12 a 14: whisper.cpp com a placa de vídeo | whisper.cpp |
 | OBS | qualquer versão, nome de arquivo padrão | igual |
 
 O app tem cerca de 2 GB por causa do modelo do Whisper. Nada precisa de senha de administrador.

@@ -8,8 +8,8 @@ confere tudo numa tela; depois do envio, o app compara nome e tamanho no destino
 Parte C do superprojeto integrado. Segue o modelo do Montador e do Revisor: janela no navegador, Mac e
 Windows, sem administrador.
 
-> **Baixar:** [Mac, macOS 13.5+](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip) ·
-> [Mac, macOS 12 a 13.4](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac-ventura.zip) ·
+> **Baixar:** [Mac, macOS 15+](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip) ·
+> [Mac, macOS 12 a 14](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac-ventura.zip) ·
 > [Windows](https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-windows.zip).
 > O app já leva o Whisper (transcrição) e o ffmpeg. Como instalar: **[INSTALAR.md](INSTALAR.md)**.
 

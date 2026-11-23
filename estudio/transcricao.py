@@ -5,7 +5,7 @@ Com 2 ou mais vídeos na pasta: "SRT unico - <nome da pasta>.srt" (separadores [
 "SRT unico - tabela.txt" (onde cada vídeo começa no SRT único).
 
 Dois motores, o mesmo modelo (Whisper large-v3-turbo):
-  Mac (chip Apple, macOS 13.5+): mlx-whisper — igual ao `transcribe` de hoje.
+  Mac (chip Apple, macOS 15+): mlx-whisper — igual ao `transcribe` de hoje.
   Windows e Mac com macOS mais antigo: whisper.cpp (com a placa de vídeo no Mac) — pode haver pequenas
   diferenças no texto.
 O ffmpeg (para tirar o áudio do vídeo) vai dentro do app (imageio-ffmpeg).
