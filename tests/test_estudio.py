@@ -3,6 +3,8 @@
 Rodar: python3 -m pytest -q tests
 """
 import json
+import shutil
+import subprocess
 import os
 import time
 from datetime import date, datetime, timedelta
@@ -358,3 +360,30 @@ def test_contexto_ssl_usa_certificados():
     from estudio import pastas_do_dia
     ctx = pastas_do_dia.contexto_ssl()
     assert isinstance(ctx, ssl.SSLContext) and ctx.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_andamento_do_envio_por_arquivo(app, tmp_path, monkeypatch):
+    from estudio import appdata
+    monkeypatch.setenv("SUBIR_NO_DRIVE_HOME", str(tmp_path / "nada"))
+    monkeypatch.setenv("FAKE_DRIVE", str(tmp_path / "drive"))
+    monkeypatch.setenv("PATH", f"{FALSOS}:" + os.environ["PATH"])
+    appdata.salvar({"envio_modo": "rclone", "rclone_destino": "drive:Gravações IEC", "transcrever": False})
+    est, cfg = app["est"], appdata.carregar()
+    t = time.time()
+    _gravar_e_parar(est, cfg, "08-15-00", t)
+    _gravar_e_parar(est, cfg, "08-40-00", t + 10)
+    dia = est.registro[0]["dia"]
+    est.subir("26_101 Ana Souza", dia)
+    env = _esperar(est, f"26_101 Ana Souza|{dia}")
+    assert env["estado"] == "ok" and env["arquivos_ok"] == 2
+    assert env["detalhe"].startswith("2,0 MB de 2,0 MB")
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="sem ffmpeg")
+def test_duracao_de_mp4_fragmentado(tmp_path):
+    """O OBS do estúdio grava MP4 fragmentado: a leitura rápida não acha a duração, o ffmpeg acha."""
+    from estudio import vigia
+    v = tmp_path / "2026-11-23 10-38-38.mp4"
+    subprocess.run(["ffmpeg", "-f", "lavfi", "-i", "color=c=gray:s=320x240:r=30:d=4", "-c:v", "libx264",
+                    "-movflags", "frag_keyframe+empty_moov", str(v), "-y", "-loglevel", "quiet"], check=True)
+    assert abs(vigia.duracao_video(v) - 4.0) < 0.2

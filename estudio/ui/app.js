@@ -203,9 +203,13 @@ function htmlGrupo(e, g) {
   const ocupado = env && ["transcrevendo", "enviando", "conferindo"].includes(env.estado);
   if (especial) acao = `<span class="dica">não sobe — mova para o professor certo</span>`;
   else if (ocupado) {
-    const nomes = {transcrevendo: "1/3 transcrevendo…", enviando: `2/3 subindo… ${env.pct || 0}%`, conferindo: "3/3 conferindo…"};
+    const total = g.itens.length;
+    const nomes = {transcrevendo: "1/3 transcrevendo…",
+                   enviando: `2/3 subindo… ${env.pct || 0}% · ${env.arquivos_ok || 0} de ${total} vídeo(s) no Drive`,
+                   conferindo: "3/3 conferindo no Drive…"};
     const pct = env.estado === "transcrevendo" ? 5 : env.estado === "conferindo" ? 100 : (env.pct || 0);
-    acao = `<div class="andamento"><span class="dica">${nomes[env.estado]}</span><div class="progresso"><i style="width:${pct}%"></i></div></div>`;
+    const det = env.estado === "enviando" ? (env.detalhe || "") : env.estado === "transcrevendo" ? (env.msg || "") : "";
+    acao = `<div class="andamento"><span class="dica">${nomes[env.estado]}</span><div class="progresso"><i style="width:${pct}%"></i></div>${det ? `<span class="dica">${esc(det)}</span>` : ""}</div>`;
   } else if (g.enviado) acao = `<span class="estado enviado">✓ enviado, pode apagar</span><button class="btn pequeno" data-subir="${esc(g.pasta)}" data-dia="${esc(g.dia)}" title="Sobe de novo (o que já está igual no Drive não sobe outra vez)">Subir de novo</button>`;
   else acao = `<button class="btn principal pequeno" data-subir="${esc(g.pasta)}" data-dia="${esc(g.dia)}" title="Transcreve, sobe e confere no Drive">${env && env.estado === "erro" ? "Tentar de novo" : "Conferido, pode subir"}</button>`;
   let rodape = "";
@@ -216,7 +220,7 @@ function htmlGrupo(e, g) {
   const itens = g.itens.map((i) => {
     const opcoes = e.opcoes.filter((o) => o !== g.pasta).map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
     const est = !i.existe && i.estado !== "enviado" ? `<span class="estado erro">arquivo sumiu</span> <button class="btn pequeno" data-esquecer="${i.id}">tirar da lista</button>`
-      : `<span class="estado ${i.estado === "enviado" ? "enviado" : i.estado === "erro" ? "erro" : i.estado === "conferido" ? "conferido" : ""}">${esc(i.msg || i.estado)}</span>`;
+      : `<span class="estado ${i.estado === "enviado" || /✓/.test(i.msg || "") ? "enviado" : i.estado === "erro" ? "erro" : i.estado === "conferido" ? "conferido" : ""}">${esc(i.msg || i.estado)}</span>`;
     const mover = i.estado === "enviado" ? "" : `<select class="campo" data-mover="${i.id}"><option value="">Mover para…</option>${opcoes}</select>`;
     return `<div class="item">
       <span class="mono">${hora(i.inicio)}</span>

@@ -169,15 +169,55 @@ def _por_linha(cmd: list[str], ao_ler) -> int:
     return p.returncode
 
 
-_PCT = re.compile(r"Transferred:\s+[\d.]+\s*\S+\s*/\s*[\d.]+\s*\S+,\s*(\d+)%")
+# linha de andamento do rclone (--stats-one-line), com ou sem "Transferred:" na frente:
+#   "INFO  :    1.234 GiB / 19.876 GiB, 6%, 30.1 MiB/s, ETA 10m5s"
+_PCT = re.compile(r"([\d.]+\s*[KMGT]?i?B)\s*/\s*([\d.]+\s*[KMGT]?i?B),\s*(\d+)%(?:,\s*([\d.]+\s*[KMGT]?i?B/s))?(?:,\s*ETA\s*(\S+))?")
+# arquivo que terminou de subir: "INFO  : 2026-11-23 10-38-38.mp4: Copied (new)"
+_COPIADO = re.compile(r"INFO\s*:\s*(.+?):\s*(?:Copied|Multi-thread Copied)")
 
 
-def enviar_pasta(exe: str, origem: Path, destino_remoto: str, progresso) -> None:
-    """Sobe a pasta inteira (vídeos + SRTs). O que já está igual no Drive não sobe de novo."""
+def _unid(txt: str) -> str:
+    """ "1.234 GiB" → "1,2 GB" """
+    m = re.match(r"([\d.]+)\s*([KMGT]?)i?B(/s)?", txt.strip())
+    if not m:
+        return txt
+    n = float(m.group(1))
+    return f"{n:.1f}".replace(".", ",") + f" {m.group(2)}B" + ("/s" if m.group(3) else "")
+
+
+def _eta(txt: str | None) -> str:
+    """ "1h2m5s" → "1 h 2 min"; "45s" → "menos de 1 min" """
+    if not txt or txt == "-":
+        return ""
+    h = re.search(r"(\d+)h", txt)
+    m = re.search(r"(\d+)m(?!s)", txt)
+    partes = []
+    if h:
+        partes.append(f"{h.group(1)} h")
+    if m:
+        partes.append(f"{m.group(1)} min")
+    return "faltam " + " ".join(partes) if partes else "falta menos de 1 min"
+
+
+def enviar_pasta(exe: str, origem: Path, destino_remoto: str, progresso, copiado=None) -> None:
+    """Sobe a pasta inteira (vídeos + SRTs). O que já está igual no Drive não sobe de novo.
+
+    progresso(pct, texto) a cada segundo; copiado(nome) quando cada arquivo termina de subir.
+    """
     def ler(linha):
         m = _PCT.search(linha)
         if m:
-            progresso(int(m.group(1)))
+            feito, total, pct, vel, eta = m.groups()
+            partes = [f"{_unid(feito)} de {_unid(total)}"]
+            if vel:
+                partes.append(_unid(vel))
+            if _eta(eta):
+                partes.append(_eta(eta))
+            progresso(int(pct), " · ".join(partes))
+            return
+        c = _COPIADO.search(linha)
+        if c and copiado:
+            copiado(c.group(1).strip())
     cmd = [exe, "copy", str(origem), destino_remoto, "--exclude", ".*", "--exclude", "*.parcial",
            "--transfers", "2", "--drive-chunk-size", "64M", "--retries", "3",
            "--stats", "1s", "--stats-one-line", "-v"]

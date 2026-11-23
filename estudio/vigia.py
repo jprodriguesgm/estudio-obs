@@ -27,6 +27,31 @@ def _agora() -> datetime:
     return datetime.now()
 
 
+def duracao_video(p: Path) -> float | None:
+    """Duração do vídeo: leitura rápida do MP4/MOV; se não der (o OBS grava MP4 fragmentado), pergunta ao ffmpeg."""
+    info = mp4info.info(p) or {}
+    if info.get("duracao"):
+        return info["duracao"]
+    d = mp4info.ffprobe(p)
+    if d:
+        return d
+    try:
+        import re as _re
+        import subprocess
+        from . import transcricao
+        ff = transcricao.ffmpeg()
+        if not ff:
+            return None
+        r = subprocess.run([ff, "-hide_banner", "-i", str(p)], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30, **transcricao._sem_janela())
+        m = _re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", r.stderr)
+        if m:
+            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def aberto_por_outro(p: Path) -> bool:
     """Mac/Linux: o arquivo ainda está aberto por algum programa (o OBS gravando)? Usa o lsof do sistema.
 
@@ -373,8 +398,7 @@ class Estudio:
             return
         self.erros.pop(p.name, None)
         self.vistos.pop(p.name, None)
-        info = mp4info.info(alvo) or {}
-        dur = info.get("duracao") or mp4info.ffprobe(alvo)
+        dur = duracao_video(alvo)
         self.registro.append({
             "id": uuid.uuid4().hex[:10], "arquivo": alvo.name, "inicio": quando.isoformat(timespec="seconds"),
             "data": datetime.strptime(dia, "%Y %m %d").date().isoformat(), "dia": dia, "pasta": d.pasta, "regra": d.regra, "aviso": d.aviso,
@@ -441,6 +465,14 @@ class Estudio:
         """Registro agrupado por dia e professor, para a tela de conferência."""
         with self.lock:
             out: dict[str, dict] = {}
+            mudou = False
+            for r in self.registro:
+                if r.get("duracao") is None and not r.get("duracao_tentada") and Path(r["caminho"]).is_file():
+                    r["duracao"] = duracao_video(Path(r["caminho"]))
+                    r["duracao_tentada"] = True
+                    mudou = True
+            if mudou:
+                self._salvar_registro()
             for r in sorted(self.registro, key=lambda x: x["inicio"]):
                 k = f"{r['pasta']}|{r['dia']}"
                 g = out.setdefault(k, {"chave": k, "pasta": r["pasta"], "dia": r["dia"], "data": r["data"],
@@ -531,8 +563,8 @@ class Estudio:
                 else:
                     andamento["etapa"] = "Já estava transcrito."
             # 2. envio
-            andamento.update(estado="enviando", pct=0, msg="subindo…")
-            marcar("conferido", "subindo…")
+            andamento.update(estado="enviando", pct=0, msg="subindo…", detalhe="começando…", arquivos_ok=0)
+            marcar("conferido", "na fila para subir")
             locais = {p.name: p.stat().st_size for p in footage.iterdir()
                       if p.is_file() and not p.name.startswith(".") and not p.name.endswith(".parcial")}
             fid = None
@@ -546,7 +578,17 @@ class Estudio:
                 else:
                     remoto = rclone.juntar(rclone.destino(cfg), pasta, dia, "Footage")
                     andamento["etapa"] = f"em {remoto}"
-                rclone.enviar_pasta(exe, footage, remoto, lambda pct: andamento.update(pct=pct))
+                por_nome = {Path(r["caminho"]).name: r for r in itens}
+
+                def copiou(nome):
+                    with self.lock:
+                        r = por_nome.get(nome)
+                        if r:
+                            r["msg"] = "no Drive ✓ (confere no fim)"
+                    andamento["arquivos_ok"] = andamento.get("arquivos_ok", 0) + 1
+
+                rclone.enviar_pasta(exe, footage, remoto,
+                                    lambda pct, txt="": andamento.update(pct=pct, detalhe=txt), copiou)
                 andamento.update(estado="conferindo", msg="conferindo no Drive…")
                 no_destino = rclone.listar(exe, remoto)
                 onde = remoto

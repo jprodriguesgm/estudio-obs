@@ -1,5 +1,5 @@
 """Estúdio — organiza sozinho as gravações do OBS por professor, pela agenda do dia."""
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 
 def ui_ok() -> bool:

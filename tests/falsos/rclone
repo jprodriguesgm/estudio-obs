@@ -22,5 +22,6 @@ elif a[0] == "copy":
     for f in src.iterdir():
         if f.is_file() and not f.name.startswith("."):
             shutil.copy2(f, dst / f.name)
+            print(f"2026/11/23 13:05:00 INFO  : {f.name}: Copied (new)", file=sys.stderr)
     print("Transferred:   	    1 MiB / 2 MiB, 50%, 1 MiB/s, ETA 1s", file=sys.stderr)
     print("Transferred:   	    2 MiB / 2 MiB, 100%, 1 MiB/s, ETA 0s", file=sys.stderr)
