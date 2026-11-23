@@ -66,7 +66,7 @@ def _diagnostico(video: str | None = None) -> int:
     m = transcricao.motor()
     print(f"{'whisper':<10} {'ok' if m['ok'] else 'FALTA ' + ', '.join(m['falta'])}  {m['nome']}", flush=True)
     ok &= m["ok"]
-    if sys.platform == "darwin":
+    if m.get("tipo") == "mlx":
         print(f"{'modelo':<10} {transcricao.modelo_mlx()}", flush=True)
     else:
         print(f"{'modelo':<10} {transcricao.modelo_cpp()}  · {transcricao.whisper_cli()}", flush=True)

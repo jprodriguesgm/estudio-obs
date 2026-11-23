@@ -3,7 +3,7 @@
 # ou quando alguém envia para o ramo "montagem" (montagem de teste).
 #   - "Versão oficial" vazia → "Montagem N (teste)", pré-lançamento.
 #   - "Versão oficial" = 1.2.3 (ou etiqueta v1.2.3) → versão oficial, no link releases/latest.
-# O Whisper vai dentro: Mac = mlx-whisper (o mesmo do transcribe); Windows = whisper.cpp.
+# O Whisper vai dentro: Mac (13.5+) = mlx-whisper (o mesmo do transcribe); Mac antigo (12+) e Windows = whisper.cpp.
 # Os modelos ficam no cache entre uma montagem e outra.
 name: Montar o app
 
@@ -67,7 +67,9 @@ jobs:
         env:
           SISTEMAS: ${{ inputs.sistemas }}
         run: |
-          MAC='{"os":"macos-15","nome":"mac"}'; WIN='{"os":"windows-2022","nome":"windows"}'
+          # mac = macOS 13.5+ com o mlx-whisper · mac-ventura = macOS 12+ com o whisper.cpp (Metal)
+          MAC='{"os":"macos-15","nome":"mac","motor":"mlx"},{"os":"macos-15","nome":"mac-ventura","motor":"cpp"}'
+          WIN='{"os":"windows-2022","nome":"windows","motor":"cpp"}'
           case "${SISTEMAS:-ambos}" in
             mac) echo "matriz={\"include\":[$MAC]}" >> "$GITHUB_OUTPUT" ;;
             windows) echo "matriz={\"include\":[$WIN]}" >> "$GITHUB_OUTPUT" ;;
@@ -85,6 +87,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PYTHONUTF8: "1"
+      ESTUDIO_MOTOR: ${{ matrix.motor }}
     steps:
       - uses: actions/checkout@v7
 
@@ -102,6 +105,12 @@ jobs:
           python -m pip install mlx numba numpy tqdm more-itertools tiktoken huggingface_hub scipy
           python -m pip install --no-deps mlx-whisper
           python -c "import mlx_whisper, mlx.core as mx, imageio_ffmpeg; print('mlx', mx.__version__, '· ffmpeg', imageio_ffmpeg.get_ffmpeg_exe())"
+
+      - name: Python do app (Mac, whisper.cpp)
+        if: matrix.nome == 'mac-ventura'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pytest imageio-ffmpeg
 
       - name: Python do app (Windows)
         if: matrix.nome == 'windows'
@@ -129,8 +138,8 @@ jobs:
           EOF
           du -sh modelos/whisper-large-v3-turbo; ls -la modelos/whisper-large-v3-turbo
 
-      - name: Baixar o modelo (Windows)
-        if: matrix.nome == 'windows' && steps.modelo.outputs.cache-hit != 'true'
+      - name: Baixar o modelo (whisper.cpp)
+        if: matrix.motor == 'cpp' && steps.modelo.outputs.cache-hit != 'true'
         shell: bash
         run: |
           mkdir -p modelos
@@ -198,6 +207,37 @@ jobs:
           path: whisper
           key: whispercpp-windows-v2
 
+      - name: whisper.cpp (cache, Mac)
+        if: matrix.nome == 'mac-ventura'
+        id: wcppmac
+        uses: actions/cache/restore@v6
+        with:
+          path: whisper
+          key: whispercpp-mac-v1
+
+      - name: whisper.cpp do código (Mac, Metal, macOS 12+)
+        if: matrix.nome == 'mac-ventura' && steps.wcppmac.outputs.cache-hit != 'true'
+        run: |
+          rm -rf whisper wcpp-src
+          git clone --depth 1 https://github.com/ggml-org/whisper.cpp wcpp-src
+          cmake -S wcpp-src -B wcpp-src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_NATIVE=OFF -DGGML_BLAS=OFF \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON > cmake.txt 2>&1 || { echo "::error title=whisper.cpp Mac (cmake)::$(tail -c 2000 cmake.txt | tr '\n' ' ')"; exit 1; }
+          cmake --build wcpp-src/build --config Release -j 4 --target whisper-cli > build.txt 2>&1 || { echo "::error title=whisper.cpp Mac (compilar)::$(grep -i error build.txt | tail -c 2000 | tr '\n' ' ')"; exit 1; }
+          mkdir -p whisper
+          cp wcpp-src/build/bin/whisper-cli whisper/whisper-cli
+          echo "whisper.cpp $(git -C wcpp-src rev-parse --short HEAD) (Metal, macOS 12+)" > whisper/VERSAO.txt
+          otool -L whisper/whisper-cli
+          ls -la whisper
+
+      - name: Guardar o whisper.cpp no cache (Mac)
+        if: matrix.nome == 'mac-ventura' && steps.wcppmac.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: whisper
+          key: whispercpp-mac-v1
+
       - name: Versão oficial
         if: needs.plano.outputs.versao != ''
         shell: bash
@@ -222,7 +262,7 @@ jobs:
 
       # ---------------------------------------------------------------- vídeo de teste (fala sintetizada)
       - name: Vídeo de teste (Mac)
-        if: matrix.nome == 'mac'
+        if: runner.os == 'macOS'
         run: |
           mkdir -p build
           FRASE="Olá, sejam bem-vindos à aula de teste do estúdio. Hoje vamos falar de filas e pilhas."
@@ -251,23 +291,37 @@ jobs:
         run: pyinstaller --noconfirm packaging/estudio.spec
 
       - name: Assinar (Mac, sem conta de desenvolvedor)
-        if: matrix.nome == 'mac'
+        if: runner.os == 'macOS'
         run: codesign --force --deep --sign - "dist/Estudio.app"
 
       - name: Diagnóstico do app montado (Mac)
-        if: matrix.nome == 'mac'
+        if: runner.os == 'macOS'
         env:
-          ESTUDIO_MLX_CPU: "1"    # a máquina do GitHub não tem Metal; no Mac de verdade usa a GPU
+          ESTUDIO_MLX_CPU: "1"      # a máquina do GitHub não tem Metal; no Mac de verdade usa a GPU
+          ESTUDIO_CPP_SEM_GPU: "1"
+          NOME: ${{ matrix.nome }}
         run: |
-          echo "### Mac" > diag-mac.txt
-          sw_vers | tr '\n' ' ' >> diag-mac.txt; echo >> diag-mac.txt
+          D="diag-$NOME.txt"
+          echo "### $NOME" > "$D"
+          sw_vers | tr '\n' ' ' >> "$D"; echo >> "$D"
+          [ -f whisper/VERSAO.txt ] && cat whisper/VERSAO.txt >> "$D"
           set +e
           "dist/Estudio.app/Contents/MacOS/Estudio" diagnostico "build/2026-01-01 10-00-00.mov" > d.txt 2>&1
           rc=$?
-          cat d.txt | tee -a diag-mac.txt
-          codesign --verify --deep --verbose=1 "dist/Estudio.app" 2>&1 | tee -a diag-mac.txt
-          du -sh "dist/Estudio.app" | tee -a diag-mac.txt
-          echo "::notice title=Diagnóstico Mac::$(tr '\n' '|' < diag-mac.txt)"
+          cat d.txt | tee -a "$D"
+          codesign --verify --deep --verbose=1 "dist/Estudio.app" 2>&1 | tee -a "$D"
+          du -sh "dist/Estudio.app" | tee -a "$D"
+          # macOS mínimo de verdade: o maior "minos" entre todos os programas e bibliotecas do app
+          MAIOR=$(find dist/Estudio.app -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.so' \) -print0 \
+            | xargs -0 -n1 sh -c 'otool -l "$0" 2>/dev/null | awk "/LC_BUILD_VERSION/{f=1} f&&/minos/{print \$2; exit}"' \
+            | python3 -c "import sys; v=[l.strip() for l in sys.stdin if l.strip()]; print(max(v, key=lambda x: [int(n) for n in x.split('.')]) if v else '?')")
+          echo "macOS mínimo (binários): $MAIOR" | tee -a "$D"
+          PLIST=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' dist/Estudio.app/Contents/Info.plist)
+          echo "macOS mínimo (Info.plist): $PLIST" | tee -a "$D"
+          echo "::notice title=Diagnóstico $NOME::$(tr '\n' '|' < "$D")"
+          if [ "$NOME" = "mac-ventura" ] && python3 -c "import sys; sys.exit(0 if [int(n) for n in '$MAIOR'.split('.')] > [13, 1] else 1)"; then
+            echo "::error title=macOS mínimo::algum programa do app pede macOS $MAIOR (o estúdio tem 13.1)"; exit 1
+          fi
           exit $rc
 
       - name: Diagnóstico do app montado (Windows)
@@ -296,10 +350,12 @@ jobs:
 
       # ---------------------------------------------------------------- compactar (limite do GitHub: 2 GB por arquivo)
       - name: Compactar (Mac)
-        if: matrix.nome == 'mac'
+        if: runner.os == 'macOS'
+        env:
+          NOME: ${{ matrix.nome }}
         run: |
-          ditto -c -k --sequesterRsrc --keepParent "dist/Estudio.app" "Estudio-mac.zip"
-          T=$(stat -f%z Estudio-mac.zip); echo "Estudio-mac.zip $((T/1048576)) MB" | tee -a diag-mac.txt
+          ditto -c -k --sequesterRsrc --keepParent "dist/Estudio.app" "Estudio-$NOME.zip"
+          T=$(stat -f%z "Estudio-$NOME.zip"); echo "Estudio-$NOME.zip $((T/1048576)) MB" | tee -a "diag-$NOME.txt"
           [ "$T" -lt 2000000000 ] || { echo "::error title=Tamanho::o app do Mac passou de 2 GB ($((T/1048576)) MB)"; exit 1; }
 
       - name: Compactar (Windows)
@@ -337,7 +393,7 @@ jobs:
           if [ -n "$VERSAO" ]; then
             TAG="v$VERSAO"
             TIT="Estúdio ${TAG#v}"; PRE="--latest"
-            AVISO="Versão oficial. Mac: baixe Estudio-mac.zip · Windows: baixe Estudio-windows.zip."
+            AVISO="Versão oficial. Mac com macOS 13.5 ou mais novo: Estudio-mac.zip · Mac com macOS 12 a 13.4 (ex.: Ventura 13.1): Estudio-mac-ventura.zip · Windows: Estudio-windows.zip."
           else
             TAG="montagem-${GITHUB_RUN_NUMBER}"; TIT="Montagem ${GITHUB_RUN_NUMBER} (teste)"; PRE="--prerelease"
             AVISO="Versão de TESTE, ainda não liberada para as equipes."
@@ -345,7 +401,7 @@ jobs:
           {
             echo "$AVISO"
             echo
-            echo "Mac (Apple Silicon, macOS 13.5 ou mais novo) e Windows 10/11 (64 bits). Whisper (transcrição) e ffmpeg já vão dentro. Como instalar: veja o [INSTALAR.md](https://github.com/$GITHUB_REPOSITORY/blob/main/INSTALAR.md)."
+            echo "Mac com chip Apple e Windows 10/11 (64 bits). Whisper (transcrição) e ffmpeg já vão dentro. Como instalar: veja o [INSTALAR.md](https://github.com/$GITHUB_REPOSITORY/blob/main/INSTALAR.md)."
             echo
             echo "<details><summary>Diagnóstico da montagem</summary>"
             echo

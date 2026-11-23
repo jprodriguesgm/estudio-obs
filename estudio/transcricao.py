@@ -5,8 +5,9 @@ Com 2 ou mais vídeos na pasta: "SRT unico - <nome da pasta>.srt" (separadores [
 "SRT unico - tabela.txt" (onde cada vídeo começa no SRT único).
 
 Dois motores, o mesmo modelo (Whisper large-v3-turbo):
-  Mac (chip Apple): mlx-whisper — igual ao `transcribe` de hoje.
-  Windows: whisper.cpp (whisper-cli.exe) — pode haver pequenas diferenças no texto.
+  Mac (chip Apple, macOS 13.5+): mlx-whisper — igual ao `transcribe` de hoje.
+  Windows e Mac com macOS mais antigo: whisper.cpp (com a placa de vídeo no Mac) — pode haver pequenas
+  diferenças no texto.
 O ffmpeg (para tirar o áudio do vídeo) vai dentro do app (imageio-ffmpeg).
 
 Linha de comando: python -m estudio transcrever <pasta ou vídeos…>   (no app: "Estudio transcrever …")
@@ -94,22 +95,26 @@ def _tem_mlx() -> bool:
         return False
 
 
+def _usa_mlx() -> bool:
+    """Mac com o mlx-whisper e o modelo dele dentro do app (macOS 13.5+). Senão, whisper.cpp."""
+    return sys.platform == "darwin" and modelo_mlx() is not None and _tem_mlx()
+
+
 def motor() -> dict:
-    """Qual motor de transcrição este computador tem dentro do app. {"nome", "ok", "falta"}"""
+    """Qual motor de transcrição este computador tem dentro do app. {"nome", "ok", "falta", "tipo"}"""
     falta = []
     if not ffmpeg():
         falta.append("ffmpeg")
-    if sys.platform == "darwin":
-        if not _tem_mlx():
-            falta.append("mlx-whisper")
-        if not modelo_mlx():
-            falta.append("modelo do Whisper")
-        return {"nome": "mlx-whisper (large-v3-turbo)", "ok": not falta, "falta": falta}
+    if _usa_mlx():
+        return {"nome": "mlx-whisper (large-v3-turbo)", "ok": not falta, "falta": falta, "tipo": "mlx"}
+    if sys.platform == "darwin" and modelo_mlx() is not None:      # rodando pelo Python, sem o mlx instalado
+        falta.append("mlx-whisper")
+        return {"nome": "mlx-whisper (large-v3-turbo)", "ok": False, "falta": falta, "tipo": "mlx"}
     if not whisper_cli():
         falta.append("whisper.cpp")
     if not modelo_cpp():
         falta.append("modelo do Whisper")
-    return {"nome": "whisper.cpp (large-v3-turbo q8)", "ok": not falta, "falta": falta}
+    return {"nome": "whisper.cpp (large-v3-turbo q8)", "ok": not falta, "falta": falta, "tipo": "cpp"}
 
 
 # ====================================================================== regras do transcribe (iguais)
@@ -291,6 +296,8 @@ def _cpp(wav: str, tmp: str) -> dict:
     base = os.path.join(tmp, "audio")
     cmd = [whisper_cli(), "-m", str(modelo_cpp()), "-f", wav, "-l", "pt", "-mc", "0", "-ojf", "-of", base,
            "-t", str(max(1, (os.cpu_count() or 4) - 1)), "-pp", "-np"]
+    if os.environ.get("ESTUDIO_CPP_SEM_GPU"):           # computador sem placa de vídeo útil (ex.: o teste no GitHub)
+        cmd.append("-ng")
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                          errors="replace", **_sem_janela())
     ultimas = []
@@ -332,7 +339,7 @@ def transcreve(video, tmp):
         return None
     _p("  Transcrevendo...")
     try:
-        dados = _mlx(wav) if sys.platform == "darwin" else _cpp(wav, tmp)
+        dados = _mlx(wav) if _usa_mlx() else _cpp(wav, tmp)
     except Exception as e:  # noqa: BLE001
         _p(f"  ERRO: a transcrição falhou neste arquivo ({e}). Pulando.")
         return None

@@ -16,6 +16,8 @@ from estudio import __version__  # noqa: E402
 
 IS_MAC = sys.platform == "darwin"
 IS_WIN = os.name == "nt"
+# Mac: "mlx" (macOS 13.5+, igual ao transcribe) ou "cpp" (whisper.cpp com Metal, macOS 12+). Windows: sempre "cpp".
+MOTOR = os.environ.get("ESTUDIO_MOTOR") or ("mlx" if IS_MAC else "cpp")
 NAME = "Estudio"
 ICON = ROOT / "packaging" / "icon" / ("icon.icns" if IS_MAC else "icon.ico")
 
@@ -29,7 +31,7 @@ binaries.append((imageio_ffmpeg.get_ffmpeg_exe(), "imageio_ffmpeg/binaries"))
 hidden += ["imageio_ffmpeg"]
 
 modelos = ROOT / "modelos"
-if IS_MAC:
+if IS_MAC and MOTOR == "mlx":
     for pacote in ("mlx", "mlx_whisper", "tiktoken", "tiktoken_ext"):
         d, b, h = collect_all(pacote)
         datas += d
@@ -40,12 +42,14 @@ if IS_MAC:
         datas.append((str(modelos / "whisper-large-v3-turbo"), "modelos/whisper-large-v3-turbo"))
     else:
         print("AVISO: sem o modelo do mlx-whisper (modelos/whisper-large-v3-turbo)")
-if IS_WIN:
+if MOTOR == "cpp":
     if (modelos / "ggml-large-v3-turbo-q8_0.bin").is_file():
         datas.append((str(modelos / "ggml-large-v3-turbo-q8_0.bin"), "modelos"))
     else:
         print("AVISO: sem o modelo do whisper.cpp (modelos/ggml-large-v3-turbo-q8_0.bin)")
-    if (ROOT / "whisper").is_dir():
+    if IS_MAC and (ROOT / "whisper" / "whisper-cli").is_file():
+        binaries.append((str(ROOT / "whisper" / "whisper-cli"), "whisper"))   # programa: assinado junto com o app
+    elif (ROOT / "whisper").is_dir():
         datas.append((str(ROOT / "whisper"), "whisper"))
     else:
         print("AVISO: sem o whisper.cpp (pasta whisper/)")
@@ -57,7 +61,8 @@ a = Analysis(
     datas=datas,
     hiddenimports=hidden,
     # o torch só serve para converter modelos; o mlx-whisper não usa na transcrição
-    excludes=["torch", "matplotlib", "pytest", "IPython", "pandas", "PIL"] + ([] if IS_WIN else ["tkinter"]),
+    excludes=["torch", "matplotlib", "pytest", "IPython", "pandas", "PIL"] + ([] if IS_WIN else ["tkinter"])
+             + (["mlx", "mlx_whisper", "numba", "llvmlite", "scipy", "numpy"] if MOTOR == "cpp" else []),
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -83,7 +88,8 @@ if IS_MAC:
             "CFBundleName": "Estúdio",
             "CFBundleShortVersionString": __version__,
             "CFBundleVersion": __version__,
-            "LSMinimumSystemVersion": "13.5",     # o mlx (Whisper do Mac) pede macOS 13.5 ou mais novo
+            # o mlx pede macOS 13.5; a versão com whisper.cpp roda a partir do 12
+            "LSMinimumSystemVersion": "13.5" if MOTOR == "mlx" else "12.0",
             "LSUIElement": True,                  # sem ícone no Dock: o app é a página no navegador
             "NSHighResolutionCapable": True,
             "NSDesktopFolderUsageDescription": "O Estúdio organiza as gravações do OBS na pasta que você escolher.",

@@ -3,18 +3,23 @@
 Uma vez em cada computador do estúdio. O app já leva dentro o **Whisper** (transcrição) e o **ffmpeg**:
 não precisa instalar Python nem o transcribe.
 
-**Baixar** (sempre a versão oficial mais nova):
-- Mac: https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip
+**Baixar** (sempre a versão oficial mais nova). Veja a versão do Mac em  → **Sobre este Mac**:
+- Mac com **macOS 13.5 ou mais novo** (Sonoma, Sequoia…):
+  https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac.zip
+- Mac com **macOS 12 até 13.4** (ex.: o Mac Studio do estúdio, Ventura 13.1):
+  https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-mac-ventura.zip
 - Windows: https://github.com/jprodriguesgm/estudio-obs/releases/latest/download/Estudio-windows.zip
+
+Se o Mac disser "Você não pode usar esta versão do aplicativo com esta versão do macOS", baixe a **mac-ventura**.
 
 O que cada computador precisa:
 
 | | Mac | Windows |
 |---|---|---|
-| Sistema | Mac com chip Apple (M1 ou mais novo), **macOS 13.5 ou mais novo** | Windows 10 ou 11, 64 bits |
+| Sistema | Mac com chip Apple (M1 ou mais novo), macOS 12 ou mais novo | Windows 10 ou 11, 64 bits |
 | **rclone** com a conexão `drive` (conta da instituição) | já pronto nos Macs com o **Subir no Drive** | instalar (passo 2 abaixo) |
 | **Link do Pastas do dia** (implantação "Estúdio") | colar nas Configurações | colar nas Configurações |
-| Transcrição | mlx-whisper, dentro do app (igual ao transcribe) | whisper.cpp, dentro do app |
+| Transcrição | macOS 13.5+: mlx-whisper (igual ao transcribe) · macOS 12 a 13.4: whisper.cpp com a placa de vídeo | whisper.cpp |
 | OBS | qualquer versão, nome de arquivo padrão | igual |
 
 O app tem cerca de 2 GB por causa do modelo do Whisper. Nada precisa de senha de administrador.
@@ -23,7 +28,8 @@ O app tem cerca de 2 GB por causa do modelo do Whisper. Nada precisa de senha de
 
 ## Mac
 
-1. Baixe o **Estudio-mac.zip**, abra (vira **Estudio.app**) e arraste para **Aplicativos**.
+1. Baixe o **Estudio-mac.zip** (ou o **Estudio-mac-ventura.zip**, veja acima), abra (vira **Estudio.app**) e
+   arraste para **Aplicativos**.
 2. **Primeira vez:** botão direito no Estudio → **Abrir** → **Abrir**. (O app não é da App Store; depois da
    primeira vez, abre com dois cliques.) Se o Mac disser que "não pode ser aberto", vá em
    *Ajustes do Sistema → Privacidade e Segurança* e clique em **Abrir Mesmo Assim**.
