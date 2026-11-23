@@ -59,7 +59,7 @@ jobs:
             echo "::error title=Versão::Use o formato 1.2.3 (só números e pontos), sem o v."
             exit 1
           fi
-          if [ -n "$VERSAO" ] && [ "$SISTEMAS" != "ambos" ]; then
+          if [ -n "$VERSAO" ] && [ "${SISTEMAS:-ambos}" != "ambos" ]; then
             echo "::error title=Versão::Versão oficial sai sempre para Mac e Windows juntos (escolha ambos)."
             exit 1
           fi
