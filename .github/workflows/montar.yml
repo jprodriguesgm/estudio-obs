@@ -100,7 +100,7 @@ jobs:
         if: matrix.nome == 'mac'
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller pytest imageio-ffmpeg
+          python -m pip install pyinstaller pytest imageio-ffmpeg truststore certifi
           # mlx-whisper sem o torch (o torch só serve para converter modelos)
           python -m pip install mlx numba numpy tqdm more-itertools tiktoken huggingface_hub scipy
           python -m pip install --no-deps mlx-whisper
@@ -110,7 +110,7 @@ jobs:
         if: matrix.nome == 'mac-ventura'
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller pytest imageio-ffmpeg
+          python -m pip install pyinstaller pytest imageio-ffmpeg truststore certifi
 
       - name: Python do app (Windows)
         if: matrix.nome == 'windows'
@@ -119,7 +119,7 @@ jobs:
           python -m pip install --upgrade pip
           # antivírus: o "envelope" pronto do PyInstaller é o mesmo de muitos vírus; montado aqui ele fica diferente
           PYINSTALLER_COMPILE_BOOTLOADER=1 python -m pip install --no-binary pyinstaller pyinstaller
-          python -m pip install pytest imageio-ffmpeg
+          python -m pip install pytest imageio-ffmpeg truststore certifi
 
       - name: Modelo do Whisper (cache)
         id: modelo

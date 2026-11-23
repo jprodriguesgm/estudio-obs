@@ -76,6 +76,20 @@ def _diagnostico(video: str | None = None) -> int:
             r = subprocess.run([cli, "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             print(f"{'whisper-cli':<10} saída {r.returncode}: {(r.stdout + r.stderr).strip().splitlines()[:1]}",
                   flush=True)
+    # conexão segura com o Google (o Pastas do dia): o Python do app precisa achar os certificados
+    import ssl
+    import urllib.error
+    import urllib.request
+    from estudio import pastas_do_dia
+    try:
+        urllib.request.urlopen("https://script.google.com/", timeout=20, context=pastas_do_dia.contexto_ssl()).close()
+        https = "ok"
+    except urllib.error.HTTPError:
+        https = "ok"                                  # respondeu (mesmo com erro HTTP): o certificado foi aceito
+    except (ssl.SSLError, urllib.error.URLError) as e:
+        https = f"ERRO {getattr(e, 'reason', e)}"
+    print(f"{'https':<10} {https}", flush=True)
+    ok &= https == "ok"
     from estudio import ui_ok
     print(f"{'tela':<10} {'ok' if ui_ok() else 'FALTA'}", flush=True)
     ok &= ui_ok()

@@ -351,3 +351,10 @@ def test_tirar_da_lista_nao_apaga_arquivo(app):
     r = est.registro[0]
     assert est.esquecer_grupo(r["pasta"], r["dia"]) == 1
     assert est.grupos() == [] and Path(r["caminho"]).is_file()
+
+
+def test_contexto_ssl_usa_certificados():
+    import ssl
+    from estudio import pastas_do_dia
+    ctx = pastas_do_dia.contexto_ssl()
+    assert isinstance(ctx, ssl.SSLContext) and ctx.verify_mode == ssl.CERT_REQUIRED

@@ -14,9 +14,29 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+
+
+def contexto_ssl() -> ssl.SSLContext:
+    """Certificados para falar com o Google.
+
+    O app empacotado leva um Python próprio, que não enxerga os certificados do Mac. Usa, nesta ordem:
+    os certificados do sistema (truststore: Keychain no Mac, repositório do Windows — inclui o certificado
+    da rede da instituição, se houver), a lista do certifi, e por último o padrão do Python.
+    """
+    try:
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001
+        return ssl.create_default_context()
 
 
 class ErroPastas(Exception):
@@ -38,7 +58,7 @@ def _chamar(url: str, params: dict, tempo: int = 90):
     q = urllib.parse.urlencode(params)
     req = urllib.request.Request(f"{base}?{q}", headers={"User-Agent": "Estudio-NPD"})
     try:
-        with urllib.request.urlopen(req, timeout=tempo) as r:       # segue o redirecionamento do Google
+        with urllib.request.urlopen(req, timeout=tempo, context=contexto_ssl()) as r:   # segue o redirecionamento
             texto = r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         raise ErroPastas(f"o Apps Script respondeu com erro {e.code}")

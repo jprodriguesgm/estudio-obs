@@ -96,7 +96,7 @@ def _tem_mlx() -> bool:
 
 
 def _usa_mlx() -> bool:
-    """Mac com o mlx-whisper e o modelo dele dentro do app (macOS 13.5+). Senão, whisper.cpp."""
+    """Mac com o mlx-whisper e o modelo dele dentro do app (macOS 15+). Senão, whisper.cpp."""
     return sys.platform == "darwin" and modelo_mlx() is not None and _tem_mlx()
 
 

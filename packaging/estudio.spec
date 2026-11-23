@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 ROOT = Path(SPECPATH).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -28,7 +28,8 @@ hidden = collect_submodules("estudio")
 # ffmpeg (tira o áudio do vídeo para o Whisper): vai como programa (no Mac, assinado junto com o app)
 import imageio_ffmpeg  # noqa: E402
 binaries.append((imageio_ffmpeg.get_ffmpeg_exe(), "imageio_ffmpeg/binaries"))
-hidden += ["imageio_ffmpeg"]
+hidden += ["imageio_ffmpeg", "truststore", "certifi"]
+datas += collect_data_files("certifi")        # lista de certificados (reserva, se o truststore falhar)
 
 modelos = ROOT / "modelos"
 if IS_MAC and MOTOR == "mlx":
